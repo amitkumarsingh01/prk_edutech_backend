@@ -1,0 +1,47 @@
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment Variables
+.env
+.env.*.local
+
+# Cache
+.cache
+.pnp.* 
+.next/
+
+# IDE-specific files
+.vscode/
+.idea/
+.DS_Store
+
+# Testing
+coverage/
+*.lcov
+
+# Build/Output directories
+dist/
+out/
+build/
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# System-specific files
+Thumbs.db
+*.swp
+
+# npm lock file
+package-lock.json
+
+# Local environment-specific files
+*.local
+.vercel
