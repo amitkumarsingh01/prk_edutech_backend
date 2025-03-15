@@ -224,6 +224,18 @@ const uiComponentSchema = new mongoose.Schema({
   order: { type: Number, default: 0 } // To maintain order of components
 });
 
+const carouselImageSchema = new mongoose.Schema({
+  id: String,
+  imageUrl: String
+});
+
+const iconSchema = new mongoose.Schema({
+  id: String,
+  image: String,
+  label: String
+});
+// Create model
+
 // Create Mongoose Models
 const User = mongoose.model('User', userSchema);
 const Batch = mongoose.model('Batch', batchSchema);
@@ -233,6 +245,8 @@ const Test = mongoose.model('Test', testSchema);
 const Assignment = mongoose.model('Assignment', assignmentSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
+const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
+const Icon = mongoose.model('Icon', iconSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -1592,6 +1606,196 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       res.status(500).json({ message: 'Server error while searching academic items' });
     }
   });
+
+  // GET all carousel images
+app.get('/carouselImages', async (req, res) => {
+  try {
+    const images = await CarouselImage.find({}).sort({ id: 1 });
+    const imageUrls = images.map(img => img.imageUrl);
+    res.json(imageUrls);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel images', error: error.message });
+  }
+});
+
+// GET all carousel images with their IDs
+app.get('/carouselImages/withIds', async (req, res) => {
+  try {
+    const images = await CarouselImage.find({}).sort({ id: 1 });
+    res.json(images);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel images', error: error.message });
+  }
+});
+
+// GET a single carousel image by ID
+app.get('/carouselImages/:id', async (req, res) => {
+  try {
+    const image = await CarouselImage.findOne({ id: req.params.id });
+    if (!image) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    res.json(image);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel image', error: error.message });
+  }
+});
+
+// POST a new carousel image
+app.post('/carouselImages', async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ message: 'Image URL is required' });
+    }
+    
+    // Get the highest ID and increment it
+    const highestIdImage = await CarouselImage.findOne().sort({ id: -1 });
+    const newId = highestIdImage ? String(parseInt(highestIdImage.id) + 1) : '1';
+    
+    const newImage = new CarouselImage({
+      id: newId,
+      imageUrl
+    });
+    
+    await newImage.save();
+    res.status(201).json(newImage);
+  } catch (error) {
+    res.status(500).json({ message: 'Error adding new carousel image', error: error.message });
+  }
+});
+
+// PUT (update) a carousel image
+app.put('/carouselImages/:id', async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    if (!imageUrl) {
+      return res.status(400).json({ message: 'Image URL is required' });
+    }
+    
+    const updatedImage = await CarouselImage.findOneAndUpdate(
+      { id: req.params.id },
+      { imageUrl },
+      { new: true }
+    );
+    
+    if (!updatedImage) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    
+    res.json(updatedImage);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating carousel image', error: error.message });
+  }
+});
+
+// DELETE a carousel image
+app.delete('/carouselImages/:id', async (req, res) => {
+  try {
+    const deletedImage = await CarouselImage.findOneAndDelete({ id: req.params.id });
+    
+    if (!deletedImage) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    
+    res.json({ message: 'Image deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting carousel image', error: error.message });
+  }
+});
+
+app.get('/icons', async (req, res) => {
+  try {
+    const icons = await Icon.find({}).sort({ id: 1 });
+    res.json(icons);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching icons', error: error.message });
+  }
+});
+
+// GET a single icon by ID
+app.get('/icons/:id', async (req, res) => {
+  try {
+    const icon = await Icon.findOne({ id: req.params.id });
+    if (!icon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    res.json(icon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching icon', error: error.message });
+  }
+});
+
+// POST a new icon
+app.post('/icons', async (req, res) => {
+  try {
+    const { image, label } = req.body;
+    
+    if (!label) {
+      return res.status(400).json({ message: 'Label is required' });
+    }
+    
+    // Get the highest ID and increment it
+    const highestIdIcon = await Icon.findOne().sort({ id: -1 });
+    const newId = highestIdIcon ? String(parseInt(highestIdIcon.id) + 1) : '1';
+    
+    const newIcon = new Icon({
+      id: newId,
+      image: image || '',
+      label
+    });
+    
+    await newIcon.save();
+    res.status(201).json(newIcon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error adding new icon', error: error.message });
+  }
+});
+
+// PUT (update) an icon
+app.put('/icons/:id', async (req, res) => {
+  try {
+    const { image, label } = req.body;
+    const updateData = {};
+    
+    if (image !== undefined) updateData.image = image;
+    if (label !== undefined) updateData.label = label;
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No update data provided' });
+    }
+    
+    const updatedIcon = await Icon.findOneAndUpdate(
+      { id: req.params.id },
+      updateData,
+      { new: true }
+    );
+    
+    if (!updatedIcon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    
+    res.json(updatedIcon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating icon', error: error.message });
+  }
+});
+
+// DELETE an icon
+app.delete('/icons/:id', async (req, res) => {
+  try {
+    const deletedIcon = await Icon.findOneAndDelete({ id: req.params.id });
+    
+    if (!deletedIcon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    
+    res.json({ message: 'Icon deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting icon', error: error.message });
+  }
+});
+
   
   // Vercel Serverless Configuration
   if (process.env.VERCEL) {
@@ -1603,3 +1807,4 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       console.log(`Server running on port ${PORT}`);
     });
   }
+
