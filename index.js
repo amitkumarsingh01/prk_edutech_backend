@@ -1,4 +1,4 @@
-// server.js - Complete Node.js backend for user management system
+// index.js - Complete Node.js backend for user management system
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
