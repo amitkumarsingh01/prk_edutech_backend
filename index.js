@@ -12,7 +12,7 @@ const { body, validationResult } = require('express-validator');
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
 // Middleware
@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
-  userType: { type: String, enum: ['free', 'lite', 'freemium'], default: 'free' },
+  userType: { type: String, enum: ['free', 'lite', 'premium'], default: 'free' },
   profile: {
     photo: { type: String },
     about: { type: String },
@@ -310,10 +310,11 @@ app.post('/api/auth/signup', [
         userType: newUser.userType
       }
     });
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
-  }
+    } catch (error) {
+        console.error('Registration error:', error.message); // Log the specific error message
+        console.error(error.stack); // Log the stack trace for more details
+        res.status(500).json({ message: 'Server error during registration', error: error.message });
+    }
 });
 
 // Login user
