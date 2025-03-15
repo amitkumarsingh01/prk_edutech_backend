@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema({
     dateOfJoining: { type: Date },
     parents: [{
       name: { type: String },
+      relationship: { type: String },  // Add relationship field
       phone: { type: String },
       email: { type: String }
     }],
@@ -453,23 +454,70 @@ app.post('/api/profile/photo', authenticateToken, upload.single('photo'), async 
   }
 });
 
+// app.post('/api/profile/parents', authenticateToken, async (req, res) => {
+//     try {
+//       const { parents } = req.body;
+      
+//       if (!Array.isArray(parents)) {
+//         return res.status(400).json({ message: 'Parents must be an array' });
+//       }
+      
+//       const user = await User.findById(req.user.userId);
+//       if (!user) {
+//         return res.status(404).json({ message: 'User not found' });
+//       }
+      
+//       if (!user.profile) user.profile = {};
+//       user.profile.parents = parents;
+//       await user.save();
+      
+//       res.json({ 
+//         message: 'Parents information updated successfully',
+//         parents: user.profile.parents
+//       });
+//     } catch (error) {
+//       console.error('Error updating parents info:', error);
+//       res.status(500).json({ message: 'Server error while updating parents information' });
+//     }
+//   });
+
 app.post('/api/profile/parents', authenticateToken, async (req, res) => {
     try {
       const { parents } = req.body;
-      
+
+      // Validate if 'parents' is an array
       if (!Array.isArray(parents)) {
         return res.status(400).json({ message: 'Parents must be an array' });
       }
-      
+
+      // Validate each parent object to ensure it has the necessary fields
+      parents.forEach(parent => {
+        if (!parent.name || !parent.relationship || !parent.phone || !parent.email) {
+          throw new Error('Each parent must have name, relationship, phone, and email');
+        }
+      });
+
+      // Find the user by the user ID from the token
       const user = await User.findById(req.user.userId);
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
       }
-      
+
+      // If user has no profile, initialize it
       if (!user.profile) user.profile = {};
-      user.profile.parents = parents;
+
+      // Update the parents' information with the full details
+      user.profile.parents = parents.map(parent => ({
+        name: parent.name,
+        relationship: parent.relationship,
+        phone: parent.phone,
+        email: parent.email
+      }));
+
+      // Save the updated user document
       await user.save();
-      
+
+      // Respond with a success message and the updated parents' info
       res.json({ 
         message: 'Parents information updated successfully',
         parents: user.profile.parents
@@ -478,7 +526,7 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       console.error('Error updating parents info:', error);
       res.status(500).json({ message: 'Server error while updating parents information' });
     }
-  });
+});
   
   // Update personal details
   app.put('/api/profile/personal', authenticateToken, async (req, res) => {
@@ -1043,9 +1091,9 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
         test: newTest
       });
     } catch (error) {
-      console.error('Error creating test record:', error);
-      res.status(500).json({ message: 'Server error while creating test record' });
-    }
+        console.error('Error creating test record:', error);
+        res.status(500).json({ message: 'Server error while creating test record', error: error.message });
+    }      
   });
   
   // Assignment Routes
