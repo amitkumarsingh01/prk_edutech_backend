@@ -381,6 +381,58 @@ app.post('/api/auth/login', [
   }
 });
 
+app.post('/api/users/:userId/reset-password', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate a temporary password
+    const tempPassword = generateTemporaryPassword();
+    
+    // Hash the temporary password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(tempPassword, salt);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Send password reset email (implement email sending logic)
+    await sendPasswordResetEmail(user.email, tempPassword);
+
+    res.json({ message: 'Password reset successfully. A temporary password has been sent to the user\'s email.' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ message: 'Server error while resetting password' });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check if the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete the user
+    await User.findByIdAndDelete(userId);
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('User deletion error:', error);
+    res.status(500).json({ message: 'Server error while deleting user' });
+  }
+});
+
 // Google/Facebook OAuth routes would be implemented here
 // For brevity, we're focusing on email/password auth in this example
 
