@@ -327,7 +327,8 @@ const Assignment = mongoose.model('Assignment', assignmentSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
 const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
-const Icon = mongoose.model('Icon', iconSchema);
+const Icon = mongoose.model('Icon', iconSchema);  
+const Book = mongoose.model('Book', bookSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
