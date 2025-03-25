@@ -45,6 +45,11 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
+const multiUpload = upload.fields([
+  { name: 'thumbnail', maxCount: 1 }, 
+  { name: 'pdf', maxCount: 1 }
+]);
+
 // Mongoose Schema Definitions
 
 // User Schema
@@ -315,6 +320,15 @@ const iconSchema = new mongoose.Schema({
   image: String,
   label: String
 });
+
+const bookSchema = new mongoose.Schema({
+  bookName: { type: String, required: true },
+  author: { type: String, required: true },
+  description: { type: String, required: true },
+  thumbnail: { type: String },
+  pdf: { type: String }
+});
+
 // Create model
 
 // Create Mongoose Models
@@ -328,6 +342,7 @@ const Payment = mongoose.model('Payment', paymentSchema);
 const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
 const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
 const Icon = mongoose.model('Icon', iconSchema);
+const Book = mongoose.model('Book', bookSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -2190,6 +2205,106 @@ app.delete('/icons/:id', async (req, res) => {
     res.json({ message: 'Icon deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting icon', error: error.message });
+  }
+});
+
+app.get('/api/ebooks', async (req, res) => {
+  try {
+    const books = await Book.find();
+    res.json(books);
+  } catch (error) {
+    console.error('Fetch Books Error:', error);
+    res.status(500).json({ message: 'Error fetching books', error: error.message });
+  }
+});
+
+// POST new book
+app.post('/api/ebooks', multiUpload, async (req, res) => {
+  try {
+    const { bookName, author, description } = req.body;
+    
+    const newBook = new Book({
+      bookName,
+      author,
+      description,
+      thumbnail: req.files && req.files['thumbnail'] 
+        ? req.files['thumbnail'][0].path 
+        : '',
+      pdf: req.files && req.files['pdf'] 
+        ? req.files['pdf'][0].path 
+        : ''
+    });
+
+    const savedBook = await newBook.save();
+    res.status(201).json(savedBook);
+  } catch (error) {
+    console.error('Create Book Error:', error);
+    res.status(400).json({ message: 'Error creating book', error: error.message });
+  }
+});
+
+// PUT update book
+app.put('/api/ebooks/:id', multiUpload, async (req, res) => {
+  try {
+    const { bookName, author, description } = req.body;
+    
+    const updateData = { bookName, author, description };
+
+    // Update thumbnail if new file is uploaded
+    if (req.files && req.files['thumbnail']) {
+      updateData.thumbnail = req.files['thumbnail'][0].path;
+    }
+
+    // Update PDF if new file is uploaded
+    if (req.files && req.files['pdf']) {
+      updateData.pdf = req.files['pdf'][0].path;
+    }
+
+    const updatedBook = await Book.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedBook) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    res.json(updatedBook);
+  } catch (error) {
+    console.error('Update Book Error:', error);
+    res.status(400).json({ message: 'Error updating book', error: error.message });
+  }
+});
+
+// DELETE book
+app.delete('/api/ebooks/:id', async (req, res) => {
+  try {
+    const book = await Book.findByIdAndDelete(req.params.id);
+    
+    if (!book) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+    
+    // Optional: Delete files from Cloudinary
+    if (book.thumbnail) {
+      await cloudinary.uploader.destroy(
+        book.thumbnail.split('/').pop().split('.')[0],
+        { resource_type: 'image' }
+      );
+    }
+    
+    if (book.pdf) {
+      await cloudinary.uploader.destroy(
+        book.pdf.split('/').pop().split('.')[0],
+        { resource_type: 'raw' }
+      );
+    }
+
+    res.json({ message: 'Book deleted successfully' });
+  } catch (error) {
+    console.error('Delete Book Error:', error);
+    res.status(500).json({ message: 'Error deleting book', error: error.message });
   }
 });
 
