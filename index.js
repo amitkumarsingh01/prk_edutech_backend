@@ -1764,7 +1764,7 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   });
 
   // GET all carousel images
-app.get('/carouselImages', async (req, res) => {
+app.get('/api/carouselImages', async (req, res) => {
   try {
     const images = await CarouselImage.find({}).sort({ id: 1 });
     const imageUrls = images.map(img => img.imageUrl);
@@ -1775,7 +1775,7 @@ app.get('/carouselImages', async (req, res) => {
 });
 
 // GET all carousel images with their IDs
-app.get('/carouselImages/withIds', async (req, res) => {
+app.get('/api/carouselImages/withIds', async (req, res) => {
   try {
     const images = await CarouselImage.find({}).sort({ id: 1 });
     res.json(images);
@@ -1785,7 +1785,7 @@ app.get('/carouselImages/withIds', async (req, res) => {
 });
 
 // GET a single carousel image by ID
-app.get('/carouselImages/:id', async (req, res) => {
+app.get('/api/carouselImages/:id', async (req, res) => {
   try {
     const image = await CarouselImage.findOne({ id: req.params.id });
     if (!image) {
@@ -1798,7 +1798,7 @@ app.get('/carouselImages/:id', async (req, res) => {
 });
 
 // POST a new carousel image
-app.post('/carouselImages', async (req, res) => {
+app.post('/api/carouselImages', async (req, res) => {
   try {
     const { imageUrl } = req.body;
     if (!imageUrl) {
@@ -1822,7 +1822,7 @@ app.post('/carouselImages', async (req, res) => {
 });
 
 // PUT (update) a carousel image
-app.put('/carouselImages/:id', async (req, res) => {
+app.put('/api/carouselImages/:id', async (req, res) => {
   try {
     const { imageUrl } = req.body;
     if (!imageUrl) {
@@ -1846,7 +1846,7 @@ app.put('/carouselImages/:id', async (req, res) => {
 });
 
 // DELETE a carousel image
-app.delete('/carouselImages/:id', async (req, res) => {
+app.delete('/api/carouselImages/:id', async (req, res) => {
   try {
     const deletedImage = await CarouselImage.findOneAndDelete({ id: req.params.id });
     
