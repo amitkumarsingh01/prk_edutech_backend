@@ -462,6 +462,40 @@ app.get('/api/search/users', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/users/reset-default-password', authenticateToken, async (req, res) => {
+  try {
+    const { userId, defaultPassword } = req.body;
+    
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Hash the default password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Optional: Log the password reset action
+    console.log(`Password reset to default for user: ${user.email}`);
+
+    res.json({ 
+      message: 'Password reset to default successfully',
+      userEmail: user.email 
+    });
+  } catch (error) {
+    console.error('Default password reset error:', error);
+    res.status(500).json({ 
+      message: 'Server error while resetting password to default',
+      error: error.message 
+    });
+  }
+});
+
 // Google/Facebook OAuth routes would be implemented here
 // For brevity, we're focusing on email/password auth in this example
 
