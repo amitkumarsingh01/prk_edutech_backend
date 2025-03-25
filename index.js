@@ -1797,27 +1797,52 @@ app.get('/api/carouselImages/:id', async (req, res) => {
   }
 });
 
-// POST a new carousel image
-app.post('/api/carouselImages', async (req, res) => {
-  try {
-    const { imageUrl } = req.body;
-    if (!imageUrl) {
-      return res.status(400).json({ message: 'Image URL is required' });
-    }
+// // POST a new carousel image
+// app.post('/api/carouselImages', async (req, res) => {
+//   try {
+//     const { imageUrl } = req.body;
+//     if (!imageUrl) {
+//       return res.status(400).json({ message: 'Image URL is required' });
+//     }
     
+//     // Get the highest ID and increment it
+//     const highestIdImage = await CarouselImage.findOne().sort({ id: -1 });
+//     const newId = highestIdImage ? String(parseInt(highestIdImage.id) + 1) : '1';
+    
+//     const newImage = new CarouselImage({
+//       id: newId,
+//       imageUrl
+//     });
+    
+//     await newImage.save();
+//     res.status(201).json(newImage);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error adding new carousel image', error: error.message });
+//   }
+// });
+
+router.post('/api/carouselImages', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ message: 'Image file is required' });
+    }
+
+    const imageUrl = req.file.path; // Cloudinary URL
+
     // Get the highest ID and increment it
     const highestIdImage = await CarouselImage.findOne().sort({ id: -1 });
     const newId = highestIdImage ? String(parseInt(highestIdImage.id) + 1) : '1';
-    
+
+    // Save image details to MongoDB
     const newImage = new CarouselImage({
       id: newId,
       imageUrl
     });
-    
+
     await newImage.save();
-    res.status(201).json(newImage);
+    res.status(201).json({ message: 'Image uploaded successfully', image: newImage });
   } catch (error) {
-    res.status(500).json({ message: 'Error adding new carousel image', error: error.message });
+    res.status(500).json({ message: 'Error uploading image', error: error.message });
   }
 });
 
