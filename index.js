@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
-  userType: { type: String, enum: ['free', 'lite', 'premium'], default: 'free' },
+  userType: { type: String, enum: ['free', 'admin', 'premium'], default: 'free' },
   profile: {
     photo: { type: String },
     about: { type: String },
@@ -1807,4 +1807,3 @@ app.delete('/icons/:id', async (req, res) => {
       console.log(`Server running on port ${PORT}`);
     });
   }
-
