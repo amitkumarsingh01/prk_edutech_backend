@@ -327,8 +327,7 @@ const Assignment = mongoose.model('Assignment', assignmentSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
 const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
-const Icon = mongoose.model('Icon', iconSchema);  
-const Book = mongoose.model('Book', bookSchema);
+const Icon = mongoose.model('Icon', iconSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -1405,110 +1404,6 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   
   // Test Performance Routes
   
-
-  const bookSchema = new mongoose.Schema({
-    bookName: { type: String, required: true },
-    author: { type: String, required: true },
-    description: { type: String, required: true },
-    thumbnail: { type: String },
-    pdf: { type: String }
-  });
-
-  const multiUpload = upload.fields([
-    { name: 'thumbnail', maxCount: 1 }, 
-    { name: 'pdf', maxCount: 1 }
-  ]);
-
-  // GET all books
-app.get('/api/ebooks', async (req, res) => {
-  try {
-    const books = await Book.find();
-    res.json(books);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// POST new book
-app.post('/api/ebooks', multiUpload, async (req, res) => {
-  try {
-    const { bookName, author, description } = req.body;
-    
-    const newBook = new Book({
-      bookName,
-      author,
-      description,
-      thumbnail: req.files['thumbnail'] 
-        ? req.files['thumbnail'][0].path 
-        : '',
-      pdf: req.files['pdf'] 
-        ? req.files['pdf'][0].path 
-        : ''
-    });
-
-    const savedBook = await newBook.save();
-    res.status(201).json(savedBook);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// PUT update book
-app.put('/api/ebooks/:id', multiUpload, async (req, res) => {
-  try {
-    const { bookName, author, description } = req.body;
-    
-    const updateData = { bookName, author, description };
-
-    // Update thumbnail if new file is uploaded
-    if (req.files['thumbnail']) {
-      updateData.thumbnail = req.files['thumbnail'][0].path;
-    }
-
-    // Update PDF if new file is uploaded
-    if (req.files['pdf']) {
-      updateData.pdf = req.files['pdf'][0].path;
-    }
-
-    const updatedBook = await Book.findByIdAndUpdate(
-      req.params.id, 
-      updateData, 
-      { new: true }
-    );
-
-    res.json(updatedBook);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// DELETE book
-app.delete('/api/ebooks/:id', async (req, res) => {
-  try {
-    const book = await Book.findByIdAndDelete(req.params.id);
-    
-    // Optional: Delete files from Cloudinary
-    if (book.thumbnail) {
-      await cloudinary.uploader.destroy(
-        book.thumbnail.split('/').pop().split('.')[0],
-        { resource_type: 'image' }
-      );
-    }
-    
-    if (book.pdf) {
-      await cloudinary.uploader.destroy(
-        book.pdf.split('/').pop().split('.')[0],
-        { resource_type: 'raw' }
-      );
-    }
-
-    res.json({ message: 'Book deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-
   // Get all tests for a user
   app.get('/api/tests', authenticateToken, async (req, res) => {
     try {
@@ -1525,8 +1420,6 @@ app.delete('/api/ebooks/:id', async (req, res) => {
       res.status(500).json({ message: 'Server error while fetching tests' });
     }
   });
-
-
   
   // Add a new test record
   app.post('/api/tests', authenticateToken, async (req, res) => {
