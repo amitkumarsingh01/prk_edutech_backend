@@ -1847,24 +1847,25 @@ app.post('/api/carouselImages', upload.single('image'), async (req, res) => {
 });
 
 // PUT (update) a carousel image
-app.put('/api/carouselImages/:id', async (req, res) => {
+app.put('/api/carouselImages/:id', upload.single('image'), async (req, res) => {
   try {
-    const { imageUrl } = req.body;
-    if (!imageUrl) {
-      return res.status(400).json({ message: 'Image URL is required' });
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ message: 'New image file is required' });
     }
-    
+
+    const imageUrl = req.file.path; // Cloudinary URL
+
     const updatedImage = await CarouselImage.findOneAndUpdate(
       { id: req.params.id },
       { imageUrl },
       { new: true }
     );
-    
+
     if (!updatedImage) {
       return res.status(404).json({ message: 'Image not found' });
     }
-    
-    res.json(updatedImage);
+
+    res.json({ message: 'Image updated successfully', image: updatedImage });
   } catch (error) {
     res.status(500).json({ message: 'Error updating carousel image', error: error.message });
   }
