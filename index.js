@@ -133,11 +133,92 @@ const batchSchema = new mongoose.Schema({
 
 // Course Schema
 const courseSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  courseId: { type: String, required: true, unique: true },
-  description: { type: String },
-  image: { type: String }
-}, { timestamps: true }); 
+  title: { 
+    type: String, 
+    required: true 
+  },
+  courseId: { 
+    type: String, 
+    required: true, 
+    unique: true 
+  },
+  duration: { 
+    type: String, 
+    required: true 
+  },
+  instructorName: { 
+    type: String, 
+    required: true 
+  },
+  thumbnail: { 
+    type: String 
+  },
+  language: { 
+    type: String, 
+    required: true 
+  },
+  access: { 
+    type: String, 
+    enum: ['online', 'offline', 'both'], 
+    required: true 
+  },
+  startDate: { 
+    type: Date, 
+    required: true 
+  },
+  endDate: { 
+    type: Date, 
+    required: true 
+  },
+  about: { 
+    type: String, 
+    required: true 
+  },
+  keyFeatures: [{ 
+    type: String 
+  }],
+  isFree: { 
+    type: Boolean, 
+    default: false 
+  },
+  price: { 
+    type: Number, 
+    default: 0 
+  },
+  totalEnrollments: { 
+    type: Number, 
+    default: 0 
+  },
+  difficulty: { 
+    type: String, 
+    enum: ['Beginner', 'Intermediate', 'Advanced'], 
+    default: 'Beginner' 
+  },
+  createdBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+}, { 
+  timestamps: true 
+});
+
+// Pre-save hook to generate unique courseId if not provided
+courseSchema.pre('save', async function(next) {
+  if (!this.courseId) {
+    const prefix = this.title.slice(0, 3).toUpperCase();
+    const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
+    this.courseId = `${prefix}-${randomSuffix}`;
+  }
+  next();
+});
 
 // Course Item Schema
 const courseItemSchema = new mongoose.Schema({
@@ -1048,41 +1129,50 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   });
   
   // Course Management Routes
-  app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
+  app.post('/api/courses', authenticateToken, upload.single('thumbnail'), async (req, res) => {
     try {
       // Check if user is admin
       if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized' });
+        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
       }
-
-      // Upload image to Cloudinary
-      let imageUrl = '';
+  
+      // Upload thumbnail to Cloudinary
+      let thumbnailUrl = '';
       if (req.file) {
         const result = await cloudinary.uploader.upload(req.file.path, {
           folder: 'courses'
         });
-        imageUrl = result.secure_url;
+        thumbnailUrl = result.secure_url;
       }
-
-      // Create course
-      const course = new Course({
-        name: req.body.name,
-        courseId: req.body.courseId,
-        description: req.body.description,
-        image: imageUrl
-      });
-
+  
+      // Prepare course data
+      const courseData = {
+        title: req.body.title,
+        courseId: req.body.courseId, // Allow custom courseId
+        duration: req.body.duration,
+        instructorName: req.body.instructorName,
+        thumbnail: thumbnailUrl,
+        language: req.body.language,
+        access: req.body.access,
+        startDate: req.body.startDate,
+        endDate: req.body.endDate,
+        about: req.body.about,
+        keyFeatures: req.body.keyFeatures ? JSON.parse(req.body.keyFeatures) : [],
+        isFree: req.body.isFree === 'true',
+        price: req.body.price || 0,
+        difficulty: req.body.difficulty || 'Beginner',
+        createdBy: req.user.userId
+      };
+  
+      const course = new Course(courseData);
       await course.save();
+  
       res.status(201).json(course);
     } catch (error) {
-      // Handle duplicate courseId
-      if (error.code === 11000) {
-        return res.status(400).json({ message: 'Course ID must be unique' });
-      }
       res.status(400).json({ message: error.message });
     }
   });
-
+  
   // Get all courses (authenticated users)
   app.get('/api/courses', authenticateToken, async (req, res) => {
     try {
@@ -1092,7 +1182,7 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   });
-
+  
   // Get single course by ID (authenticated users)
   app.get('/api/courses/:id', authenticateToken, async (req, res) => {
     try {
@@ -1105,59 +1195,69 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   });
-
+  
   // Update a course (Admin only)
-  app.put('/api/courses/:id', authenticateToken, upload.single('image'), async (req, res) => {
+  app.put('/api/courses/:id', authenticateToken, upload.single('thumbnail'), async (req, res) => {
     try {
       // Check if user is admin
       if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized' });
+        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
       }
-
+  
       const courseId = req.params.id;
       const course = await Course.findById(courseId);
-
+  
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-
-      // Handle image upload
+  
+      // Handle thumbnail upload
       if (req.file) {
         const result = await cloudinary.uploader.upload(req.file.path, {
           folder: 'courses'
         });
-        course.image = result.secure_url;
+        course.thumbnail = result.secure_url;
       }
-
+  
       // Update course fields
-      course.name = req.body.name || course.name;
-      course.courseId = req.body.courseId || course.courseId;
-      course.description = req.body.description || course.description;
-
+      course.title = req.body.title || course.title;
+      course.duration = req.body.duration || course.duration;
+      course.instructorName = req.body.instructorName || course.instructorName;
+      course.language = req.body.language || course.language;
+      course.access = req.body.access || course.access;
+      course.startDate = req.body.startDate || course.startDate;
+      course.endDate = req.body.endDate || course.endDate;
+      course.about = req.body.about || course.about;
+      course.keyFeatures = req.body.keyFeatures 
+        ? JSON.parse(req.body.keyFeatures) 
+        : course.keyFeatures;
+      course.isFree = req.body.isFree !== undefined 
+        ? req.body.isFree === 'true' 
+        : course.isFree;
+      course.price = req.body.price || course.price;
+      course.difficulty = req.body.difficulty || course.difficulty;
+      course.updatedAt = new Date();
+  
       await course.save();
       res.json(course);
     } catch (error) {
-      // Handle duplicate courseId
-      if (error.code === 11000) {
-        return res.status(400).json({ message: 'Course ID must be unique' });
-      }
       res.status(400).json({ message: error.message });
     }
   });
-
+  
   // Delete a course (Admin only)
   app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
     try {
       // Check if user is admin
       if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized' });
+        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
       }
-
+  
       const course = await Course.findByIdAndDelete(req.params.id);
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-
+  
       res.json({ message: 'Course deleted successfully' });
     } catch (error) {
       res.status(500).json({ message: error.message });
