@@ -1132,9 +1132,9 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   app.post('/api/courses', authenticateToken, upload.single('thumbnail'), async (req, res) => {
     try {
       // Check if user is admin
-      if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      }
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
   
       // Upload thumbnail to Cloudinary
       let thumbnailUrl = '';
