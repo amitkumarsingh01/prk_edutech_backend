@@ -433,6 +433,35 @@ app.delete('/api/users/:userId', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/search/users', authenticateToken, async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    let users;
+    if (!query || query.trim() === '') {
+      // If no query, fetch all users
+      users = await User.find()
+        .select('name email phone userType')
+        .limit(50);
+    } else {
+      // If query exists, perform search
+      users = await User.find({
+        $or: [
+          { name: { $regex: query, $options: 'i' } },
+          { email: { $regex: query, $options: 'i' } },
+          { phone: { $regex: query, $options: 'i' } }
+        ]
+      }).select('name email phone userType')
+        .limit(50);
+    }
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ message: 'Server error while searching users' });
+  }
+});
+
 // Google/Facebook OAuth routes would be implemented here
 // For brevity, we're focusing on email/password auth in this example
 
