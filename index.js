@@ -1200,9 +1200,9 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   app.put('/api/courses/:id', authenticateToken, upload.single('thumbnail'), async (req, res) => {
     try {
       // Check if user is admin
-      if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      }
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
   
       const courseId = req.params.id;
       const course = await Course.findById(courseId);
@@ -1249,9 +1249,9 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
     try {
       // Check if user is admin
-      if (req.user.userType !== 'admin') {
-        return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      }
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
   
       const course = await Course.findByIdAndDelete(req.params.id);
       if (!course) {
