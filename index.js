@@ -412,24 +412,65 @@ app.post('/api/users/:userId/reset-password', authenticateToken, async (req, res
   }
 });
 
-// Delete user
-app.delete('/api/users/:userId', authenticateToken, async (req, res) => {
+app.post('/api/users/reset-password', authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId, newPassword } = req.body;
     
-    // Check if the user exists
+    // Find the user
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete the user
-    await User.findByIdAndDelete(userId);
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    res.json({ message: 'User deleted successfully' });
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Log the password reset action
+    console.log(`Password reset for user: ${user.email}`);
+
+    res.json({ 
+      message: 'Password reset successfully',
+      userEmail: user.email 
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ 
+      message: 'Server error while resetting password',
+      error: error.message 
+    });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Find and delete the user
+    const deletedUser = await User.findByIdAndDelete(userId);
+    
+    if (!deletedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ 
+      message: 'User deleted successfully',
+      deletedUser: {
+        id: deletedUser._id,
+        email: deletedUser.email
+      }
+    });
   } catch (error) {
     console.error('User deletion error:', error);
-    res.status(500).json({ message: 'Server error while deleting user' });
+    res.status(500).json({ 
+      message: 'Server error while deleting user',
+      error: error.message 
+    });
   }
 });
 
