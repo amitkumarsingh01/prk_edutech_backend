@@ -2219,50 +2219,20 @@ app.get('/api/ebooks', async (req, res) => {
 });
 
 // POST new book
-// app.post('/api/ebooks', multiUpload, async (req, res) => {
-//   try {
-//     const { bookName, author, description } = req.body;
-    
-//     const newBook = new Book({
-//       bookName,
-//       author,
-//       description,
-//       thumbnail: req.files && req.files['thumbnail'] 
-//         ? req.files['thumbnail'][0].path 
-//         : '',
-//       pdf: req.files && req.files['pdf'] 
-//         ? req.files['pdf'][0].path 
-//         : ''
-//     });
-
-//     const savedBook = await newBook.save();
-//     res.status(201).json(savedBook);
-//   } catch (error) {
-//     console.error('Create Book Error:', error);
-//     res.status(400).json({ message: 'Error creating book', error: error.message });
-//   }
-// });
-
 app.post('/api/ebooks', multiUpload, async (req, res) => {
   try {
     const { bookName, author, description } = req.body;
-
-    // Upload files to Cloudinary
-    const thumbnailUrl = req.files['thumbnail']
-      ? (await cloudinary.uploader.upload(req.files['thumbnail'][0].path)).secure_url
-      : '';
-
-    const pdfUrl = req.files['pdf']
-      ? (await cloudinary.uploader.upload(req.files['pdf'][0].path, { resource_type: 'raw' })).secure_url
-      : '';
-
-    // Save book details with Cloudinary URLs
+    
     const newBook = new Book({
       bookName,
       author,
       description,
-      thumbnail: thumbnailUrl,
-      pdf: pdfUrl
+      thumbnail: req.files && req.files['thumbnail'] 
+        ? req.files['thumbnail'][0].path 
+        : '',
+      pdf: req.files && req.files['pdf'] 
+        ? req.files['pdf'][0].path 
+        : ''
     });
 
     const savedBook = await newBook.save();
@@ -2272,7 +2242,6 @@ app.post('/api/ebooks', multiUpload, async (req, res) => {
     res.status(400).json({ message: 'Error creating book', error: error.message });
   }
 });
-
 
 // PUT update book
 app.put('/api/ebooks/:id', multiUpload, async (req, res) => {
