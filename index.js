@@ -1821,7 +1821,7 @@ app.get('/api/carouselImages/:id', async (req, res) => {
 //   }
 // });
 
-router.post('/api/carouselImages', upload.single('image'), async (req, res) => {
+app.post('/api/carouselImages', upload.single('image'), async (req, res) => {
   try {
     if (!req.file || !req.file.path) {
       return res.status(400).json({ message: 'Image file is required' });
