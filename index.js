@@ -137,7 +137,7 @@ const courseSchema = new mongoose.Schema({
   courseId: { type: String, required: true, unique: true },
   description: { type: String },
   image: { type: String }
-});
+}, { timestamps: true }); 
 
 // Course Item Schema
 const courseItemSchema = new mongoose.Schema({
@@ -1048,144 +1048,259 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   });
   
   // Course Management Routes
-  
-  // Get all courses
+  app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+      // Check if user is admin
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: 'Unauthorized' });
+      }
+
+      // Upload image to Cloudinary
+      let imageUrl = '';
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'courses'
+        });
+        imageUrl = result.secure_url;
+      }
+
+      // Create course
+      const course = new Course({
+        name: req.body.name,
+        courseId: req.body.courseId,
+        description: req.body.description,
+        image: imageUrl
+      });
+
+      await course.save();
+      res.status(201).json(course);
+    } catch (error) {
+      // Handle duplicate courseId
+      if (error.code === 11000) {
+        return res.status(400).json({ message: 'Course ID must be unique' });
+      }
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Get all courses (authenticated users)
   app.get('/api/courses', authenticateToken, async (req, res) => {
     try {
       const courses = await Course.find();
       res.json(courses);
     } catch (error) {
-      console.error('Error fetching courses:', error);
-      res.status(500).json({ message: 'Server error while fetching courses' });
+      res.status(500).json({ message: error.message });
     }
   });
-  
-  // Get course by ID
+
+  // Get single course by ID (authenticated users)
   app.get('/api/courses/:id', authenticateToken, async (req, res) => {
     try {
       const course = await Course.findById(req.params.id);
-      
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-      
-      // Get course items for this course
-      const courseItems = await CourseItem.find({ courseId: course._id });
-      
-      res.json({
-        course,
-        courseItems
-      });
+      res.json(course);
     } catch (error) {
-      console.error('Error fetching course:', error);
-      res.status(500).json({ message: 'Server error while fetching course' });
+      res.status(500).json({ message: error.message });
     }
   });
+
+  // Update a course (Admin only)
+  app.put('/api/courses/:id', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+      // Check if user is admin
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: 'Unauthorized' });
+      }
+
+      const courseId = req.params.id;
+      const course = await Course.findById(courseId);
+
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
+      // Handle image upload
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'courses'
+        });
+        course.image = result.secure_url;
+      }
+
+      // Update course fields
+      course.name = req.body.name || course.name;
+      course.courseId = req.body.courseId || course.courseId;
+      course.description = req.body.description || course.description;
+
+      await course.save();
+      res.json(course);
+    } catch (error) {
+      // Handle duplicate courseId
+      if (error.code === 11000) {
+        return res.status(400).json({ message: 'Course ID must be unique' });
+      }
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Delete a course (Admin only)
+  app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
+    try {
+      // Check if user is admin
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: 'Unauthorized' });
+      }
+
+      const course = await Course.findByIdAndDelete(req.params.id);
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+
+      res.json({ message: 'Course deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // // Get all courses
+  // app.get('/api/courses', authenticateToken, async (req, res) => {
+  //   try {
+  //     const courses = await Course.find();
+  //     res.json(courses);
+  //   } catch (error) {
+  //     console.error('Error fetching courses:', error);
+  //     res.status(500).json({ message: 'Server error while fetching courses' });
+  //   }
+  // });
+  
+  // // Get course by ID
+  // app.get('/api/courses/:id', authenticateToken, async (req, res) => {
+  //   try {
+  //     const course = await Course.findById(req.params.id);
+      
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
+      
+  //     // Get course items for this course
+  //     const courseItems = await CourseItem.find({ courseId: course._id });
+      
+  //     res.json({
+  //       course,
+  //       courseItems
+  //     });
+  //   } catch (error) {
+  //     console.error('Error fetching course:', error);
+  //     res.status(500).json({ message: 'Server error while fetching course' });
+  //   }
+  // });
   
 
-  app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
-    try {
-      const { name, courseId, description } = req.body;
+  // app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
+  //   try {
+  //     const { name, courseId, description } = req.body;
       
-      // Check if course with this ID already exists
-      const existingCourse = await Course.findOne({ courseId });
-      if (existingCourse) {
-        return res.status(400).json({ message: 'Course with this ID already exists' });
-      }
+  //     // Check if course with this ID already exists
+  //     const existingCourse = await Course.findOne({ courseId });
+  //     if (existingCourse) {
+  //       return res.status(400).json({ message: 'Course with this ID already exists' });
+  //     }
       
-      const newCourse = new Course({
-        name,
-        courseId,
-        description,
-        image: req.file ? req.file.path : null
-      });
+  //     const newCourse = new Course({
+  //       name,
+  //       courseId,
+  //       description,
+  //       image: req.file ? req.file.path : null
+  //     });
       
-      await newCourse.save();
+  //     await newCourse.save();
       
-      res.status(201).json({
-        message: 'Course created successfully',
-        course: newCourse
-      });
-    } catch (error) {
-      console.error('Error creating course:', error);
-      res.status(500).json({ message: 'Server error while creating course' });
-    }
-  });
+  //     res.status(201).json({
+  //       message: 'Course created successfully',
+  //       course: newCourse
+  //     });
+  //   } catch (error) {
+  //     console.error('Error creating course:', error);
+  //     res.status(500).json({ message: 'Server error while creating course' });
+  //   }
+  // });
   
-  // Add course item
-  app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
-    try {
-      const { name, description } = req.body;
-      const courseId = req.params.id;
+  // // Add course item
+  // app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
+  //   try {
+  //     const { name, description } = req.body;
+  //     const courseId = req.params.id;
       
-      // Check if course exists
-      const course = await Course.findById(courseId);
-      if (!course) {
-        return res.status(404).json({ message: 'Course not found' });
-      }
+  //     // Check if course exists
+  //     const course = await Course.findById(courseId);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
       
-      const newCourseItem = new CourseItem({
-        name,
-        description,
-        image: req.file ? req.file.path : null,
-        courseId
-      });
+  //     const newCourseItem = new CourseItem({
+  //       name,
+  //       description,
+  //       image: req.file ? req.file.path : null,
+  //       courseId
+  //     });
       
-      await newCourseItem.save();
+  //     await newCourseItem.save();
       
-      res.status(201).json({
-        message: 'Course item created successfully',
-        courseItem: newCourseItem
-      });
-    } catch (error) {
-      console.error('Error creating course item:', error);
-      res.status(500).json({ message: 'Server error while creating course item' });
-    }
-  });
+  //     res.status(201).json({
+  //       message: 'Course item created successfully',
+  //       courseItem: newCourseItem
+  //     });
+  //   } catch (error) {
+  //     console.error('Error creating course item:', error);
+  //     res.status(500).json({ message: 'Server error while creating course item' });
+  //   }
+  // });
   
-  // Add student to course
-  app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
-    try {
-      const { userId } = req.body;
+  // // Add student to course
+  // app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
+  //   try {
+  //     const { userId } = req.body;
       
-      const course = await Course.findById(req.params.id);
-      if (!course) {
-        return res.status(404).json({ message: 'Course not found' });
-      }
+  //     const course = await Course.findById(req.params.id);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
       
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
+  //     const user = await User.findById(userId);
+  //     if (!user) {
+  //       return res.status(404).json({ message: 'User not found' });
+  //     }
       
-      // Check if user already has this course
-      if (user.courses.includes(course._id)) {
-        return res.status(400).json({ message: 'User already enrolled in this course' });
-      }
+  //     // Check if user already has this course
+  //     if (user.courses.includes(course._id)) {
+  //       return res.status(400).json({ message: 'User already enrolled in this course' });
+  //     }
       
-      // Add course to user
-      user.courses.push(course._id);
-      await user.save();
+  //     // Add course to user
+  //     user.courses.push(course._id);
+  //     await user.save();
       
-      // Create notification for user
-      user.notifications.push({
-        message: `You have been enrolled in course: ${course.name}`,
-        date: new Date(),
-        read: false
-      });
+  //     // Create notification for user
+  //     user.notifications.push({
+  //       message: `You have been enrolled in course: ${course.name}`,
+  //       date: new Date(),
+  //       read: false
+  //     });
       
-      await user.save();
+  //     await user.save();
       
-      res.json({
-        message: 'Student enrolled in course successfully',
-        courseId: course._id,
-        userId: user._id
-      });
-    } catch (error) {
-      console.error('Error enrolling student in course:', error);
-      res.status(500).json({ message: 'Server error while enrolling student in course' });
-    }
-  });
+  //     res.json({
+  //       message: 'Student enrolled in course successfully',
+  //       courseId: course._id,
+  //       userId: user._id
+  //     });
+  //   } catch (error) {
+  //     console.error('Error enrolling student in course:', error);
+  //     res.status(500).json({ message: 'Server error while enrolling student in course' });
+  //   }
+  // });
   
   // Test Performance Routes
   
