@@ -51,7 +51,62 @@ const multiUpload = upload.fields([
 ]);
 
 // Mongoose Schema Definitions
+const testSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  topic: { type: String, required: true }, // New field
+  description: { type: String, required: true }, // New field
+  duration: { type: Number, required: true },
+  questions: [
+    {
+      questionText: { type: String, required: true },
+      options: {
+        option1: { type: String, required: true },
+        option2: { type: String, required: true },
+        option3: { type: String, required: true },
+        option4: { type: String, required: true }
+      },
+      correctOption: { type: String, enum: ['option1', 'option2', 'option3', 'option4'], required: true },
+      solution: { type: String, required: true } // New field
+    }
+  ]
+});
 
+const validateTest = (req, res, next) => {
+  const { title, topic, description, duration, questions } = req.body;
+
+  if (!title || title.trim() === '') return res.status(400).json({ message: 'Title is required' });
+  if (!topic || topic.trim() === '') return res.status(400).json({ message: 'Topic is required' });
+  if (!description || description.trim() === '') return res.status(400).json({ message: 'Description is required' });
+  if (!duration || duration <= 0) return res.status(400).json({ message: 'Invalid duration' });
+
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ message: 'At least one question is required' });
+  }
+
+  for (let question of questions) {
+    if (!question.questionText || question.questionText.trim() === '') {
+      return res.status(400).json({ message: 'Question text is required' });
+    }
+
+    if (!question.options || 
+        !question.options.option1 || 
+        !question.options.option2 || 
+        !question.options.option3 || 
+        !question.options.option4) {
+      return res.status(400).json({ message: 'All options are required' });
+    }
+
+    if (!question.correctOption || !['option1', 'option2', 'option3', 'option4'].includes(question.correctOption)) {
+      return res.status(400).json({ message: 'Invalid correct option' });
+    }
+
+    if (!question.solution || question.solution.trim() === '') {
+      return res.status(400).json({ message: 'Solution is required' });
+    }
+  }
+
+  next();
+};
 // User Schema
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -2309,62 +2364,7 @@ app.delete('/api/ebooks/:id', async (req, res) => {
 });
 
 
-const testSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  topic: { type: String, required: true }, // New field
-  description: { type: String, required: true }, // New field
-  duration: { type: Number, required: true },
-  questions: [
-    {
-      questionText: { type: String, required: true },
-      options: {
-        option1: { type: String, required: true },
-        option2: { type: String, required: true },
-        option3: { type: String, required: true },
-        option4: { type: String, required: true }
-      },
-      correctOption: { type: String, enum: ['option1', 'option2', 'option3', 'option4'], required: true },
-      solution: { type: String, required: true } // New field
-    }
-  ]
-});
 
-const validateTest = (req, res, next) => {
-  const { title, topic, description, duration, questions } = req.body;
-
-  if (!title || title.trim() === '') return res.status(400).json({ message: 'Title is required' });
-  if (!topic || topic.trim() === '') return res.status(400).json({ message: 'Topic is required' });
-  if (!description || description.trim() === '') return res.status(400).json({ message: 'Description is required' });
-  if (!duration || duration <= 0) return res.status(400).json({ message: 'Invalid duration' });
-
-  if (!questions || !Array.isArray(questions) || questions.length === 0) {
-    return res.status(400).json({ message: 'At least one question is required' });
-  }
-
-  for (let question of questions) {
-    if (!question.questionText || question.questionText.trim() === '') {
-      return res.status(400).json({ message: 'Question text is required' });
-    }
-
-    if (!question.options || 
-        !question.options.option1 || 
-        !question.options.option2 || 
-        !question.options.option3 || 
-        !question.options.option4) {
-      return res.status(400).json({ message: 'All options are required' });
-    }
-
-    if (!question.correctOption || !['option1', 'option2', 'option3', 'option4'].includes(question.correctOption)) {
-      return res.status(400).json({ message: 'Invalid correct option' });
-    }
-
-    if (!question.solution || question.solution.trim() === '') {
-      return res.status(400).json({ message: 'Solution is required' });
-    }
-  }
-
-  next();
-};
 // ✅ Create a new test (POST)
 app.post('/api/tests', validateTest, async (req, res) => {
   try {
