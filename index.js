@@ -237,27 +237,27 @@ const courseItemSchema = new mongoose.Schema({
   }
 });
 
-// Test Performance Schema
-const testSchema = new mongoose.Schema({
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User',
-    required: true
-  },
-  batchId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Batch' 
-  },
-  courseId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Course' 
-  },
-  testType: { type: String, enum: ['batch', 'course'], required: true },
-  date: { type: Date, default: Date.now },
-  marks: { type: Number, required: true },
-  totalMarks: { type: Number, required: true },
-  description: { type: String }
-});
+// // Test Performance Schema
+// const testSchema = new mongoose.Schema({
+//   userId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'User',
+//     required: true
+//   },
+//   batchId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'Batch' 
+//   },
+//   courseId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'Course' 
+//   },
+//   testType: { type: String, enum: ['batch', 'course'], required: true },
+//   date: { type: Date, default: Date.now },
+//   marks: { type: Number, required: true },
+//   totalMarks: { type: Number, required: true },
+//   description: { type: String }
+// });
 
 // Assignment Schema
 const assignmentSchema = new mongoose.Schema({
@@ -1420,81 +1420,81 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   // Test Performance Routes
   
   // Get all tests for a user
-  app.get('/api/tests', authenticateToken, async (req, res) => {
-    try {
-      const userId = req.user.userId;
+  // app.get('/api/tests', authenticateToken, async (req, res) => {
+  //   try {
+  //     const userId = req.user.userId;
       
-      const tests = await Test.find({ userId })
-        .populate('batchId', 'name batchId')
-        .populate('courseId', 'name courseId')
-        .sort({ date: -1 });
+  //     const tests = await Test.find({ userId })
+  //       .populate('batchId', 'name batchId')
+  //       .populate('courseId', 'name courseId')
+  //       .sort({ date: -1 });
       
-      res.json(tests);
-    } catch (error) {
-      console.error('Error fetching tests:', error);
-      res.status(500).json({ message: 'Server error while fetching tests' });
-    }
-  });
+  //     res.json(tests);
+  //   } catch (error) {
+  //     console.error('Error fetching tests:', error);
+  //     res.status(500).json({ message: 'Server error while fetching tests' });
+  //   }
+  // });
   
-  // Add a new test record
-  app.post('/api/tests', authenticateToken, async (req, res) => {
-    try {
-      const { userId, batchId, courseId, testType, marks, totalMarks, description } = req.body;
+  // // Add a new test record
+  // app.post('/api/tests', authenticateToken, async (req, res) => {
+  //   try {
+  //     const { userId, batchId, courseId, testType, marks, totalMarks, description } = req.body;
       
-      // Validate test type
-      if (!['batch', 'course'].includes(testType)) {
-        return res.status(400).json({ message: 'Invalid test type' });
-      }
+  //     // Validate test type
+  //     if (!['batch', 'course'].includes(testType)) {
+  //       return res.status(400).json({ message: 'Invalid test type' });
+  //     }
       
-      // Check if batch exists if batchId provided
-      if (batchId) {
-        const batch = await Batch.findById(batchId);
-        if (!batch) {
-          return res.status(404).json({ message: 'Batch not found' });
-        }
-      }
+  //     // Check if batch exists if batchId provided
+  //     if (batchId) {
+  //       const batch = await Batch.findById(batchId);
+  //       if (!batch) {
+  //         return res.status(404).json({ message: 'Batch not found' });
+  //       }
+  //     }
       
-      // Check if course exists if courseId provided
-      if (courseId) {
-        const course = await Course.findById(courseId);
-        if (!course) {
-          return res.status(404).json({ message: 'Course not found' });
-        }
-      }
+  //     // Check if course exists if courseId provided
+  //     if (courseId) {
+  //       const course = await Course.findById(courseId);
+  //       if (!course) {
+  //         return res.status(404).json({ message: 'Course not found' });
+  //       }
+  //     }
       
-      const newTest = new Test({
-        userId,
-        batchId: batchId || null,
-        courseId: courseId || null,
-        testType,
-        marks,
-        totalMarks,
-        description
-      });
+  //     const newTest = new Test({
+  //       userId,
+  //       batchId: batchId || null,
+  //       courseId: courseId || null,
+  //       testType,
+  //       marks,
+  //       totalMarks,
+  //       description
+  //     });
       
-      await newTest.save();
+  //     await newTest.save();
       
-      // Create notification for user
-      const user = await User.findById(userId);
-      if (user) {
-        user.notifications.push({
-          message: `New test result added: ${marks}/${totalMarks} in ${testType === 'batch' ? 'batch test' : 'course test'}`,
-          date: new Date(),
-          read: false
-        });
+  //     // Create notification for user
+  //     const user = await User.findById(userId);
+  //     if (user) {
+  //       user.notifications.push({
+  //         message: `New test result added: ${marks}/${totalMarks} in ${testType === 'batch' ? 'batch test' : 'course test'}`,
+  //         date: new Date(),
+  //         read: false
+  //       });
         
-        await user.save();
-      }
+  //       await user.save();
+  //     }
       
-      res.status(201).json({
-        message: 'Test record created successfully',
-        test: newTest
-      });
-    } catch (error) {
-        console.error('Error creating test record:', error);
-        res.status(500).json({ message: 'Server error while creating test record', error: error.message });
-    }      
-  });
+  //     res.status(201).json({
+  //       message: 'Test record created successfully',
+  //       test: newTest
+  //     });
+  //   } catch (error) {
+  //       console.error('Error creating test record:', error);
+  //       res.status(500).json({ message: 'Server error while creating test record', error: error.message });
+  //   }      
+  // });
   
   // Assignment Routes
   
@@ -2308,6 +2308,233 @@ app.delete('/api/ebooks/:id', async (req, res) => {
   }
 });
 
+
+const testSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  topic: { type: String, required: true }, // New field
+  description: { type: String, required: true }, // New field
+  duration: { type: Number, required: true },
+  questions: [
+    {
+      questionText: { type: String, required: true },
+      options: {
+        option1: { type: String, required: true },
+        option2: { type: String, required: true },
+        option3: { type: String, required: true },
+        option4: { type: String, required: true }
+      },
+      correctOption: { type: String, enum: ['option1', 'option2', 'option3', 'option4'], required: true },
+      solution: { type: String, required: true } // New field
+    }
+  ]
+});
+
+const validateTest = (req, res, next) => {
+  const { title, topic, description, duration, questions } = req.body;
+
+  if (!title || title.trim() === '') return res.status(400).json({ message: 'Title is required' });
+  if (!topic || topic.trim() === '') return res.status(400).json({ message: 'Topic is required' });
+  if (!description || description.trim() === '') return res.status(400).json({ message: 'Description is required' });
+  if (!duration || duration <= 0) return res.status(400).json({ message: 'Invalid duration' });
+
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ message: 'At least one question is required' });
+  }
+
+  for (let question of questions) {
+    if (!question.questionText || question.questionText.trim() === '') {
+      return res.status(400).json({ message: 'Question text is required' });
+    }
+
+    if (!question.options || 
+        !question.options.option1 || 
+        !question.options.option2 || 
+        !question.options.option3 || 
+        !question.options.option4) {
+      return res.status(400).json({ message: 'All options are required' });
+    }
+
+    if (!question.correctOption || !['option1', 'option2', 'option3', 'option4'].includes(question.correctOption)) {
+      return res.status(400).json({ message: 'Invalid correct option' });
+    }
+
+    if (!question.solution || question.solution.trim() === '') {
+      return res.status(400).json({ message: 'Solution is required' });
+    }
+  }
+
+  next();
+};
+// ✅ Create a new test (POST)
+app.post('/api/tests', validateTest, async (req, res) => {
+  try {
+    const newTest = new Test(req.body);
+    await newTest.save();
+    res.status(201).json(newTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ Get all tests (Only basic info)
+app.get('/api/tests', async (req, res) => {
+  try {
+    const tests = await Test.find().select('title topic description duration questionCount');
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ✅ Get a specific test (Detailed info)
+app.get('/api/tests/:id', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) return res.status(404).json({ message: 'Test not found' });
+
+    const formattedTest = {
+      title: test.title,
+      topic: test.topic,
+      description: test.description,
+      duration: test.duration,
+      questionCount: test.questions.length,
+      questions: test.questions.map((q, index) => ({
+        number: index + 1,
+        questionText: q.questionText,
+        options: {
+          option1: q.options.option1,
+          option2: q.options.option2,
+          option3: q.options.option3,
+          option4: q.options.option4
+        },
+        correctOption: q.correctOption,
+        solution: q.solution
+      }))
+    };
+
+    res.json(formattedTest);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ✅ Update a test (PUT)
+app.put('/api/tests/:id', validateTest, async (req, res) => {
+  try {
+    const updatedTest = await Test.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedTest) return res.status(404).json({ message: 'Test not found' });
+
+    res.json(updatedTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ Delete a test (DELETE)
+app.delete('/api/tests/:id', async (req, res) => {
+  try {
+    const deletedTest = await Test.findByIdAndDelete(req.params.id);
+
+    if (!deletedTest) return res.status(404).json({ message: 'Test not found' });
+
+    res.json({ message: 'Test deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Routes
+
+// Create a new test
+app.post('/api/tests', validateTest, async (req, res) => {
+  try {
+    const newTest = new Test(req.body);
+    await newTest.save();
+    res.status(201).json(newTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all tests
+app.get('/api/tests', async (req, res) => {
+  try {
+    const tests = await Test.find().select('-questions');
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a specific test by ID
+app.get('/api/tests/:id', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+    res.json(test);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update a test
+app.put('/api/tests/:id', validateTest, async (req, res) => {
+  try {
+    const updatedTest = await Test.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedTest) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+
+    res.json(updatedTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete a test
+app.delete('/api/tests/:id', async (req, res) => {
+  try {
+    const deletedTest = await Test.findByIdAndDelete(req.params.id);
+
+    if (!deletedTest) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+
+    res.json({ message: 'Test deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Additional route for getting test details with full questions
+app.get('/api/tests/:id/details', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+    res.json({
+      title: test.title,
+      duration: test.duration,
+      questionCount: test.questions.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
   
   // Vercel Serverless Configuration
   if (process.env.VERCEL) {
@@ -2319,3 +2546,4 @@ app.delete('/api/ebooks/:id', async (req, res) => {
       console.log(`Server running on port ${PORT}`);
     });
   }
+
