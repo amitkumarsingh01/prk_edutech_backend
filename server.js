@@ -1,4 +1,4 @@
-// server.js - Complete Node.js backend for user management system
+// index.js - Complete Node.js backend for user management system
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -45,15 +45,75 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
-// Mongoose Schema Definitions
+const multiUpload = upload.fields([
+  { name: 'thumbnail', maxCount: 1 }, 
+  { name: 'pdf', maxCount: 1 }
+]);
 
+// Mongoose Schema Definitions
+const testSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  topic: { type: String, required: true }, // New field
+  description: { type: String, required: true }, // New field
+  duration: { type: Number, required: true },
+  questions: [
+    {
+      questionText: { type: String, required: true },
+      options: {
+        option1: { type: String, required: true },
+        option2: { type: String, required: true },
+        option3: { type: String, required: true },
+        option4: { type: String, required: true }
+      },
+      correctOption: { type: String, enum: ['option1', 'option2', 'option3', 'option4'], required: true },
+      solution: { type: String, required: true } // New field
+    }
+  ]
+});
+
+const validateTest = (req, res, next) => {
+  const { title, topic, description, duration, questions } = req.body;
+
+  if (!title || title.trim() === '') return res.status(400).json({ message: 'Title is required' });
+  if (!topic || topic.trim() === '') return res.status(400).json({ message: 'Topic is required' });
+  if (!description || description.trim() === '') return res.status(400).json({ message: 'Description is required' });
+  if (!duration || duration <= 0) return res.status(400).json({ message: 'Invalid duration' });
+
+  if (!questions || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ message: 'At least one question is required' });
+  }
+
+  for (let question of questions) {
+    if (!question.questionText || question.questionText.trim() === '') {
+      return res.status(400).json({ message: 'Question text is required' });
+    }
+
+    if (!question.options || 
+        !question.options.option1 || 
+        !question.options.option2 || 
+        !question.options.option3 || 
+        !question.options.option4) {
+      return res.status(400).json({ message: 'All options are required' });
+    }
+
+    if (!question.correctOption || !['option1', 'option2', 'option3', 'option4'].includes(question.correctOption)) {
+      return res.status(400).json({ message: 'Invalid correct option' });
+    }
+
+    if (!question.solution || question.solution.trim() === '') {
+      return res.status(400).json({ message: 'Solution is required' });
+    }
+  }
+
+  next();
+};
 // User Schema
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   phone: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
-  userType: { type: String, enum: ['free', 'lite', 'premium'], default: 'free' },
+  userType: { type: String, enum: ['free', 'admin', 'premium'], default: 'free' },
   profile: {
     photo: { type: String },
     about: { type: String },
@@ -133,10 +193,91 @@ const batchSchema = new mongoose.Schema({
 
 // Course Schema
 const courseSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  courseId: { type: String, required: true, unique: true },
-  description: { type: String },
-  image: { type: String }
+  title: { 
+    type: String, 
+    required: true 
+  },
+  courseId: { 
+    type: String, 
+    required: true, 
+    unique: true 
+  },
+  duration: { 
+    type: String, 
+    required: true 
+  },
+  instructorName: { 
+    type: String, 
+    required: true 
+  },
+  thumbnail: { 
+    type: String 
+  },
+  language: { 
+    type: String, 
+    required: true 
+  },
+  access: { 
+    type: String, 
+    enum: ['online', 'offline', 'both'], 
+    required: true 
+  },
+  startDate: { 
+    type: Date, 
+    required: true 
+  },
+  endDate: { 
+    type: Date, 
+    required: true 
+  },
+  about: { 
+    type: String, 
+    required: true 
+  },
+  keyFeatures: [{ 
+    type: String 
+  }],
+  isFree: { 
+    type: Boolean, 
+    default: false 
+  },
+  price: { 
+    type: Number, 
+    default: 0 
+  },
+  totalEnrollments: { 
+    type: Number, 
+    default: 0 
+  },
+  difficulty: { 
+    type: String, 
+    enum: ['Beginner', 'Intermediate', 'Advanced'], 
+    default: 'Beginner' 
+  },
+  createdBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+}, { 
+  timestamps: true 
+});
+
+// Pre-save hook to generate unique courseId if not provided
+courseSchema.pre('save', async function(next) {
+  if (!this.courseId) {
+    const prefix = this.title.slice(0, 3).toUpperCase();
+    const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
+    this.courseId = `${prefix}-${randomSuffix}`;
+  }
+  next();
 });
 
 // Course Item Schema
@@ -151,27 +292,27 @@ const courseItemSchema = new mongoose.Schema({
   }
 });
 
-// Test Performance Schema
-const testSchema = new mongoose.Schema({
-  userId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User',
-    required: true
-  },
-  batchId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Batch' 
-  },
-  courseId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Course' 
-  },
-  testType: { type: String, enum: ['batch', 'course'], required: true },
-  date: { type: Date, default: Date.now },
-  marks: { type: Number, required: true },
-  totalMarks: { type: Number, required: true },
-  description: { type: String }
-});
+// // Test Performance Schema
+// const testSchema = new mongoose.Schema({
+//   userId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'User',
+//     required: true
+//   },
+//   batchId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'Batch' 
+//   },
+//   courseId: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'Course' 
+//   },
+//   testType: { type: String, enum: ['batch', 'course'], required: true },
+//   date: { type: Date, default: Date.now },
+//   marks: { type: Number, required: true },
+//   totalMarks: { type: Number, required: true },
+//   description: { type: String }
+// });
 
 // Assignment Schema
 const assignmentSchema = new mongoose.Schema({
@@ -224,6 +365,27 @@ const uiComponentSchema = new mongoose.Schema({
   order: { type: Number, default: 0 } // To maintain order of components
 });
 
+const carouselImageSchema = new mongoose.Schema({
+  id: String,
+  imageUrl: String
+});
+
+const iconSchema = new mongoose.Schema({
+  id: String,
+  image: String,
+  label: String
+});
+
+const bookSchema = new mongoose.Schema({
+  bookName: { type: String, required: true },
+  author: { type: String, required: true },
+  description: { type: String, required: true },
+  thumbnail: { type: String },
+  pdf: { type: String }
+});
+
+// Create model
+
 // Create Mongoose Models
 const User = mongoose.model('User', userSchema);
 const Batch = mongoose.model('Batch', batchSchema);
@@ -233,6 +395,9 @@ const Test = mongoose.model('Test', testSchema);
 const Assignment = mongoose.model('Assignment', assignmentSchema);
 const Payment = mongoose.model('Payment', paymentSchema);
 const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
+const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
+const Icon = mongoose.model('Icon', iconSchema);
+const Book = mongoose.model('Book', bookSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -367,6 +532,162 @@ app.post('/api/auth/login', [
   }
 });
 
+app.post('/api/users/:userId/reset-password', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Generate a temporary password
+    const tempPassword = generateTemporaryPassword();
+    
+    // Hash the temporary password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(tempPassword, salt);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Send password reset email (implement email sending logic)
+    await sendPasswordResetEmail(user.email, tempPassword);
+
+    res.json({ message: 'Password reset successfully. A temporary password has been sent to the user\'s email.' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ message: 'Server error while resetting password' });
+  }
+});
+
+app.post('/api/users/reset-password', authenticateToken, async (req, res) => {
+  try {
+    const { userId, newPassword } = req.body;
+    
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Log the password reset action
+    console.log(`Password reset for user: ${user.email}`);
+
+    res.json({ 
+      message: 'Password reset successfully',
+      userEmail: user.email 
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ 
+      message: 'Server error while resetting password',
+      error: error.message 
+    });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Find and delete the user
+    const deletedUser = await User.findByIdAndDelete(userId);
+    
+    if (!deletedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ 
+      message: 'User deleted successfully',
+      deletedUser: {
+        id: deletedUser._id,
+        email: deletedUser.email
+      }
+    });
+  } catch (error) {
+    console.error('User deletion error:', error);
+    res.status(500).json({ 
+      message: 'Server error while deleting user',
+      error: error.message 
+    });
+  }
+});
+
+app.get('/api/search/users', authenticateToken, async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    let users;
+    if (!query || query.trim() === '') {
+      // If no query, fetch all users
+      users = await User.find()
+        .select('name email phone userType')
+        .limit(50);
+    } else {
+      // If query exists, perform search
+      users = await User.find({
+        $or: [
+          { name: { $regex: query, $options: 'i' } },
+          { email: { $regex: query, $options: 'i' } },
+          { phone: { $regex: query, $options: 'i' } }
+        ]
+      }).select('name email phone userType')
+        .limit(50);
+    }
+    
+    res.json(users);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ message: 'Server error while searching users' });
+  }
+});
+
+app.post('/api/users/reset-default-password', authenticateToken, async (req, res) => {
+  try {
+    const { userId, defaultPassword } = req.body;
+    
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Hash the default password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Optional: Log the password reset action
+    console.log(`Password reset to default for user: ${user.email}`);
+
+    res.json({ 
+      message: 'Password reset to default successfully',
+      userEmail: user.email 
+    });
+  } catch (error) {
+    console.error('Default password reset error:', error);
+    res.status(500).json({ 
+      message: 'Server error while resetting password to default',
+      error: error.message 
+    });
+  }
+});
+
 // Google/Facebook OAuth routes would be implemented here
 // For brevity, we're focusing on email/password auth in this example
 
@@ -453,6 +774,33 @@ app.post('/api/profile/photo', authenticateToken, upload.single('photo'), async 
     res.status(500).json({ message: 'Server error while updating profile photo' });
   }
 });
+
+// app.post('/api/profile/parents', authenticateToken, async (req, res) => {
+//     try {
+//       const { parents } = req.body;
+      
+//       if (!Array.isArray(parents)) {
+//         return res.status(400).json({ message: 'Parents must be an array' });
+//       }
+      
+//       const user = await User.findById(req.user.userId);
+//       if (!user) {
+//         return res.status(404).json({ message: 'User not found' });
+//       }
+      
+//       if (!user.profile) user.profile = {};
+//       user.profile.parents = parents;
+//       await user.save();
+      
+//       res.json({ 
+//         message: 'Parents information updated successfully',
+//         parents: user.profile.parents
+//       });
+//     } catch (error) {
+//       console.error('Error updating parents info:', error);
+//       res.status(500).json({ message: 'Server error while updating parents information' });
+//     }
+//   });
 
 app.post('/api/profile/parents', authenticateToken, async (req, res) => {
     try {
@@ -851,223 +1199,357 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   });
   
   // Course Management Routes
+  app.post('/api/courses', authenticateToken, upload.single('thumbnail'), async (req, res) => {
+    try {
+      // Check if user is admin
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
   
-  // Get all courses
+      // Upload thumbnail to Cloudinary
+      let thumbnailUrl = '';
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'courses'
+        });
+        thumbnailUrl = result.secure_url;
+      }
+  
+      // Prepare course data
+      const courseData = {
+        title: req.body.title,
+        courseId: req.body.courseId, // Allow custom courseId
+        duration: req.body.duration,
+        instructorName: req.body.instructorName,
+        thumbnail: thumbnailUrl,
+        language: req.body.language,
+        access: req.body.access,
+        startDate: req.body.startDate,
+        endDate: req.body.endDate,
+        about: req.body.about,
+        keyFeatures: req.body.keyFeatures ? JSON.parse(req.body.keyFeatures) : [],
+        isFree: req.body.isFree === 'true',
+        price: req.body.price || 0,
+        difficulty: req.body.difficulty || 'Beginner',
+        createdBy: req.user.userId
+      };
+  
+      const course = new Course(courseData);
+      await course.save();
+  
+      res.status(201).json(course);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  // Get all courses (authenticated users)
   app.get('/api/courses', authenticateToken, async (req, res) => {
     try {
       const courses = await Course.find();
       res.json(courses);
     } catch (error) {
-      console.error('Error fetching courses:', error);
-      res.status(500).json({ message: 'Server error while fetching courses' });
+      res.status(500).json({ message: error.message });
     }
   });
   
-  // Get course by ID
+  // Get single course by ID (authenticated users)
   app.get('/api/courses/:id', authenticateToken, async (req, res) => {
     try {
       const course = await Course.findById(req.params.id);
-      
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
-      
-      // Get course items for this course
-      const courseItems = await CourseItem.find({ courseId: course._id });
-      
-      res.json({
-        course,
-        courseItems
-      });
+      res.json(course);
     } catch (error) {
-      console.error('Error fetching course:', error);
-      res.status(500).json({ message: 'Server error while fetching course' });
+      res.status(500).json({ message: error.message });
     }
   });
+  
+  // Update a course (Admin only)
+  app.put('/api/courses/:id', authenticateToken, upload.single('thumbnail'), async (req, res) => {
+    try {
+      // Check if user is admin
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
+  
+      const courseId = req.params.id;
+      const course = await Course.findById(courseId);
+  
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+  
+      // Handle thumbnail upload
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: 'courses'
+        });
+        course.thumbnail = result.secure_url;
+      }
+  
+      // Update course fields
+      course.title = req.body.title || course.title;
+      course.duration = req.body.duration || course.duration;
+      course.instructorName = req.body.instructorName || course.instructorName;
+      course.language = req.body.language || course.language;
+      course.access = req.body.access || course.access;
+      course.startDate = req.body.startDate || course.startDate;
+      course.endDate = req.body.endDate || course.endDate;
+      course.about = req.body.about || course.about;
+      course.keyFeatures = req.body.keyFeatures 
+        ? JSON.parse(req.body.keyFeatures) 
+        : course.keyFeatures;
+      course.isFree = req.body.isFree !== undefined 
+        ? req.body.isFree === 'true' 
+        : course.isFree;
+      course.price = req.body.price || course.price;
+      course.difficulty = req.body.difficulty || course.difficulty;
+      course.updatedAt = new Date();
+  
+      await course.save();
+      res.json(course);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  // Delete a course (Admin only)
+  app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
+    try {
+      // Check if user is admin
+      // if (req.user.userType !== 'admin') {
+      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+      // }
+  
+      const course = await Course.findByIdAndDelete(req.params.id);
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+  
+      res.json({ message: 'Course deleted successfully' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // // Get all courses
+  // app.get('/api/courses', authenticateToken, async (req, res) => {
+  //   try {
+  //     const courses = await Course.find();
+  //     res.json(courses);
+  //   } catch (error) {
+  //     console.error('Error fetching courses:', error);
+  //     res.status(500).json({ message: 'Server error while fetching courses' });
+  //   }
+  // });
+  
+  // // Get course by ID
+  // app.get('/api/courses/:id', authenticateToken, async (req, res) => {
+  //   try {
+  //     const course = await Course.findById(req.params.id);
+      
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
+      
+  //     // Get course items for this course
+  //     const courseItems = await CourseItem.find({ courseId: course._id });
+      
+  //     res.json({
+  //       course,
+  //       courseItems
+  //     });
+  //   } catch (error) {
+  //     console.error('Error fetching course:', error);
+  //     res.status(500).json({ message: 'Server error while fetching course' });
+  //   }
+  // });
   
 
-  app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
-    try {
-      const { name, courseId, description } = req.body;
+  // app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
+  //   try {
+  //     const { name, courseId, description } = req.body;
       
-      // Check if course with this ID already exists
-      const existingCourse = await Course.findOne({ courseId });
-      if (existingCourse) {
-        return res.status(400).json({ message: 'Course with this ID already exists' });
-      }
+  //     // Check if course with this ID already exists
+  //     const existingCourse = await Course.findOne({ courseId });
+  //     if (existingCourse) {
+  //       return res.status(400).json({ message: 'Course with this ID already exists' });
+  //     }
       
-      const newCourse = new Course({
-        name,
-        courseId,
-        description,
-        image: req.file ? req.file.path : null
-      });
+  //     const newCourse = new Course({
+  //       name,
+  //       courseId,
+  //       description,
+  //       image: req.file ? req.file.path : null
+  //     });
       
-      await newCourse.save();
+  //     await newCourse.save();
       
-      res.status(201).json({
-        message: 'Course created successfully',
-        course: newCourse
-      });
-    } catch (error) {
-      console.error('Error creating course:', error);
-      res.status(500).json({ message: 'Server error while creating course' });
-    }
-  });
+  //     res.status(201).json({
+  //       message: 'Course created successfully',
+  //       course: newCourse
+  //     });
+  //   } catch (error) {
+  //     console.error('Error creating course:', error);
+  //     res.status(500).json({ message: 'Server error while creating course' });
+  //   }
+  // });
   
-  // Add course item
-  app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
-    try {
-      const { name, description } = req.body;
-      const courseId = req.params.id;
+  // // Add course item
+  // app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
+  //   try {
+  //     const { name, description } = req.body;
+  //     const courseId = req.params.id;
       
-      // Check if course exists
-      const course = await Course.findById(courseId);
-      if (!course) {
-        return res.status(404).json({ message: 'Course not found' });
-      }
+  //     // Check if course exists
+  //     const course = await Course.findById(courseId);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
       
-      const newCourseItem = new CourseItem({
-        name,
-        description,
-        image: req.file ? req.file.path : null,
-        courseId
-      });
+  //     const newCourseItem = new CourseItem({
+  //       name,
+  //       description,
+  //       image: req.file ? req.file.path : null,
+  //       courseId
+  //     });
       
-      await newCourseItem.save();
+  //     await newCourseItem.save();
       
-      res.status(201).json({
-        message: 'Course item created successfully',
-        courseItem: newCourseItem
-      });
-    } catch (error) {
-      console.error('Error creating course item:', error);
-      res.status(500).json({ message: 'Server error while creating course item' });
-    }
-  });
+  //     res.status(201).json({
+  //       message: 'Course item created successfully',
+  //       courseItem: newCourseItem
+  //     });
+  //   } catch (error) {
+  //     console.error('Error creating course item:', error);
+  //     res.status(500).json({ message: 'Server error while creating course item' });
+  //   }
+  // });
   
-  // Add student to course
-  app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
-    try {
-      const { userId } = req.body;
+  // // Add student to course
+  // app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
+  //   try {
+  //     const { userId } = req.body;
       
-      const course = await Course.findById(req.params.id);
-      if (!course) {
-        return res.status(404).json({ message: 'Course not found' });
-      }
+  //     const course = await Course.findById(req.params.id);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
       
-      const user = await User.findById(userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
+  //     const user = await User.findById(userId);
+  //     if (!user) {
+  //       return res.status(404).json({ message: 'User not found' });
+  //     }
       
-      // Check if user already has this course
-      if (user.courses.includes(course._id)) {
-        return res.status(400).json({ message: 'User already enrolled in this course' });
-      }
+  //     // Check if user already has this course
+  //     if (user.courses.includes(course._id)) {
+  //       return res.status(400).json({ message: 'User already enrolled in this course' });
+  //     }
       
-      // Add course to user
-      user.courses.push(course._id);
-      await user.save();
+  //     // Add course to user
+  //     user.courses.push(course._id);
+  //     await user.save();
       
-      // Create notification for user
-      user.notifications.push({
-        message: `You have been enrolled in course: ${course.name}`,
-        date: new Date(),
-        read: false
-      });
+  //     // Create notification for user
+  //     user.notifications.push({
+  //       message: `You have been enrolled in course: ${course.name}`,
+  //       date: new Date(),
+  //       read: false
+  //     });
       
-      await user.save();
+  //     await user.save();
       
-      res.json({
-        message: 'Student enrolled in course successfully',
-        courseId: course._id,
-        userId: user._id
-      });
-    } catch (error) {
-      console.error('Error enrolling student in course:', error);
-      res.status(500).json({ message: 'Server error while enrolling student in course' });
-    }
-  });
+  //     res.json({
+  //       message: 'Student enrolled in course successfully',
+  //       courseId: course._id,
+  //       userId: user._id
+  //     });
+  //   } catch (error) {
+  //     console.error('Error enrolling student in course:', error);
+  //     res.status(500).json({ message: 'Server error while enrolling student in course' });
+  //   }
+  // });
   
   // Test Performance Routes
   
   // Get all tests for a user
-  app.get('/api/tests', authenticateToken, async (req, res) => {
-    try {
-      const userId = req.user.userId;
+  // app.get('/api/tests', authenticateToken, async (req, res) => {
+  //   try {
+  //     const userId = req.user.userId;
       
-      const tests = await Test.find({ userId })
-        .populate('batchId', 'name batchId')
-        .populate('courseId', 'name courseId')
-        .sort({ date: -1 });
+  //     const tests = await Test.find({ userId })
+  //       .populate('batchId', 'name batchId')
+  //       .populate('courseId', 'name courseId')
+  //       .sort({ date: -1 });
       
-      res.json(tests);
-    } catch (error) {
-      console.error('Error fetching tests:', error);
-      res.status(500).json({ message: 'Server error while fetching tests' });
-    }
-  });
+  //     res.json(tests);
+  //   } catch (error) {
+  //     console.error('Error fetching tests:', error);
+  //     res.status(500).json({ message: 'Server error while fetching tests' });
+  //   }
+  // });
   
-  // Add a new test record
-  app.post('/api/tests', authenticateToken, async (req, res) => {
-    try {
-      const { userId, batchId, courseId, testType, marks, totalMarks, description } = req.body;
+  // // Add a new test record
+  // app.post('/api/tests', authenticateToken, async (req, res) => {
+  //   try {
+  //     const { userId, batchId, courseId, testType, marks, totalMarks, description } = req.body;
       
-      // Validate test type
-      if (!['batch', 'course'].includes(testType)) {
-        return res.status(400).json({ message: 'Invalid test type' });
-      }
+  //     // Validate test type
+  //     if (!['batch', 'course'].includes(testType)) {
+  //       return res.status(400).json({ message: 'Invalid test type' });
+  //     }
       
-      // Check if batch exists if batchId provided
-      if (batchId) {
-        const batch = await Batch.findById(batchId);
-        if (!batch) {
-          return res.status(404).json({ message: 'Batch not found' });
-        }
-      }
+  //     // Check if batch exists if batchId provided
+  //     if (batchId) {
+  //       const batch = await Batch.findById(batchId);
+  //       if (!batch) {
+  //         return res.status(404).json({ message: 'Batch not found' });
+  //       }
+  //     }
       
-      // Check if course exists if courseId provided
-      if (courseId) {
-        const course = await Course.findById(courseId);
-        if (!course) {
-          return res.status(404).json({ message: 'Course not found' });
-        }
-      }
+  //     // Check if course exists if courseId provided
+  //     if (courseId) {
+  //       const course = await Course.findById(courseId);
+  //       if (!course) {
+  //         return res.status(404).json({ message: 'Course not found' });
+  //       }
+  //     }
       
-      const newTest = new Test({
-        userId,
-        batchId: batchId || null,
-        courseId: courseId || null,
-        testType,
-        marks,
-        totalMarks,
-        description
-      });
+  //     const newTest = new Test({
+  //       userId,
+  //       batchId: batchId || null,
+  //       courseId: courseId || null,
+  //       testType,
+  //       marks,
+  //       totalMarks,
+  //       description
+  //     });
       
-      await newTest.save();
+  //     await newTest.save();
       
-      // Create notification for user
-      const user = await User.findById(userId);
-      if (user) {
-        user.notifications.push({
-          message: `New test result added: ${marks}/${totalMarks} in ${testType === 'batch' ? 'batch test' : 'course test'}`,
-          date: new Date(),
-          read: false
-        });
+  //     // Create notification for user
+  //     const user = await User.findById(userId);
+  //     if (user) {
+  //       user.notifications.push({
+  //         message: `New test result added: ${marks}/${totalMarks} in ${testType === 'batch' ? 'batch test' : 'course test'}`,
+  //         date: new Date(),
+  //         read: false
+  //       });
         
-        await user.save();
-      }
+  //       await user.save();
+  //     }
       
-      res.status(201).json({
-        message: 'Test record created successfully',
-        test: newTest
-      });
-    } catch (error) {
-        console.error('Error creating test record:', error);
-        res.status(500).json({ message: 'Server error while creating test record', error: error.message });
-    }      
-  });
+  //     res.status(201).json({
+  //       message: 'Test record created successfully',
+  //       test: newTest
+  //     });
+  //   } catch (error) {
+  //       console.error('Error creating test record:', error);
+  //       res.status(500).json({ message: 'Server error while creating test record', error: error.message });
+  //   }      
+  // });
   
   // Assignment Routes
   
@@ -1565,6 +2047,494 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
       res.status(500).json({ message: 'Server error while searching academic items' });
     }
   });
+
+  // GET all carousel images
+app.get('/api/carouselImages', async (req, res) => {
+  try {
+    const images = await CarouselImage.find({}).sort({ id: 1 });
+    const imageUrls = images.map(img => img.imageUrl);
+    res.json(imageUrls);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel images', error: error.message });
+  }
+});
+
+// GET all carousel images with their IDs
+app.get('/api/carouselImages/withIds', async (req, res) => {
+  try {
+    const images = await CarouselImage.find({}).sort({ id: 1 });
+    res.json(images);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel images', error: error.message });
+  }
+});
+
+// GET a single carousel image by ID
+app.get('/api/carouselImages/:id', async (req, res) => {
+  try {
+    const image = await CarouselImage.findOne({ id: req.params.id });
+    if (!image) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    res.json(image);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching carousel image', error: error.message });
+  }
+});
+
+// // POST a new carousel image
+// app.post('/api/carouselImages', async (req, res) => {
+//   try {
+//     const { imageUrl } = req.body;
+//     if (!imageUrl) {
+//       return res.status(400).json({ message: 'Image URL is required' });
+//     }
+    
+//     // Get the highest ID and increment it
+//     const highestIdImage = await CarouselImage.findOne().sort({ id: -1 });
+//     const newId = highestIdImage ? String(parseInt(highestIdImage.id) + 1) : '1';
+    
+//     const newImage = new CarouselImage({
+//       id: newId,
+//       imageUrl
+//     });
+    
+//     await newImage.save();
+//     res.status(201).json(newImage);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error adding new carousel image', error: error.message });
+//   }
+// });
+
+app.post('/api/carouselImages', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ message: 'Image file is required' });
+    }
+
+    const imageUrl = req.file.path; // Cloudinary URL
+
+    // Get the highest ID and increment it
+    const highestIdImage = await CarouselImage.findOne().sort({ id: -1 });
+    const newId = highestIdImage ? String(parseInt(highestIdImage.id) + 1) : '1';
+
+    // Save image details to MongoDB
+    const newImage = new CarouselImage({
+      id: newId,
+      imageUrl
+    });
+
+    await newImage.save();
+    res.status(201).json({ message: 'Image uploaded successfully', image: newImage });
+  } catch (error) {
+    res.status(500).json({ message: 'Error uploading image', error: error.message });
+  }
+});
+
+// PUT (update) a carousel image
+app.put('/api/carouselImages/:id', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ message: 'New image file is required' });
+    }
+
+    const imageUrl = req.file.path; // Cloudinary URL
+
+    const updatedImage = await CarouselImage.findOneAndUpdate(
+      { id: req.params.id },
+      { imageUrl },
+      { new: true }
+    );
+
+    if (!updatedImage) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+
+    res.json({ message: 'Image updated successfully', image: updatedImage });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating carousel image', error: error.message });
+  }
+});
+
+// DELETE a carousel image
+app.delete('/api/carouselImages/:id', async (req, res) => {
+  try {
+    const deletedImage = await CarouselImage.findOneAndDelete({ id: req.params.id });
+    
+    if (!deletedImage) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    
+    res.json({ message: 'Image deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting carousel image', error: error.message });
+  }
+});
+
+app.get('/icons', async (req, res) => {
+  try {
+    const icons = await Icon.find({}).sort({ id: 1 });
+    res.json(icons);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching icons', error: error.message });
+  }
+});
+
+// GET a single icon by ID
+app.get('/icons/:id', async (req, res) => {
+  try {
+    const icon = await Icon.findOne({ id: req.params.id });
+    if (!icon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    res.json(icon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching icon', error: error.message });
+  }
+});
+
+// POST a new icon
+app.post('/icons', async (req, res) => {
+  try {
+    const { image, label } = req.body;
+    
+    if (!label) {
+      return res.status(400).json({ message: 'Label is required' });
+    }
+    
+    // Get the highest ID and increment it
+    const highestIdIcon = await Icon.findOne().sort({ id: -1 });
+    const newId = highestIdIcon ? String(parseInt(highestIdIcon.id) + 1) : '1';
+    
+    const newIcon = new Icon({
+      id: newId,
+      image: image || '',
+      label
+    });
+    
+    await newIcon.save();
+    res.status(201).json(newIcon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error adding new icon', error: error.message });
+  }
+});
+
+// PUT (update) an icon
+app.put('/icons/:id', async (req, res) => {
+  try {
+    const { image, label } = req.body;
+    const updateData = {};
+    
+    if (image !== undefined) updateData.image = image;
+    if (label !== undefined) updateData.label = label;
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No update data provided' });
+    }
+    
+    const updatedIcon = await Icon.findOneAndUpdate(
+      { id: req.params.id },
+      updateData,
+      { new: true }
+    );
+    
+    if (!updatedIcon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    
+    res.json(updatedIcon);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating icon', error: error.message });
+  }
+});
+
+// DELETE an icon
+app.delete('/icons/:id', async (req, res) => {
+  try {
+    const deletedIcon = await Icon.findOneAndDelete({ id: req.params.id });
+    
+    if (!deletedIcon) {
+      return res.status(404).json({ message: 'Icon not found' });
+    }
+    
+    res.json({ message: 'Icon deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting icon', error: error.message });
+  }
+});
+
+app.get('/api/ebooks', async (req, res) => {
+  try {
+    const books = await Book.find();
+    res.json(books);
+  } catch (error) {
+    console.error('Fetch Books Error:', error);
+    res.status(500).json({ message: 'Error fetching books', error: error.message });
+  }
+});
+
+// POST new book
+app.post('/api/ebooks', multiUpload, async (req, res) => {
+  try {
+    const { bookName, author, description } = req.body;
+    
+    const newBook = new Book({
+      bookName,
+      author,
+      description,
+      thumbnail: req.files && req.files['thumbnail'] 
+        ? req.files['thumbnail'][0].path 
+        : '',
+      pdf: req.files && req.files['pdf'] 
+        ? req.files['pdf'][0].path 
+        : ''
+    });
+
+    const savedBook = await newBook.save();
+    res.status(201).json(savedBook);
+  } catch (error) {
+    console.error('Create Book Error:', error);
+    res.status(400).json({ message: 'Error creating book', error: error.message });
+  }
+});
+
+// PUT update book
+app.put('/api/ebooks/:id', multiUpload, async (req, res) => {
+  try {
+    const { bookName, author, description } = req.body;
+    
+    const updateData = { bookName, author, description };
+
+    // Update thumbnail if new file is uploaded
+    if (req.files && req.files['thumbnail']) {
+      updateData.thumbnail = req.files['thumbnail'][0].path;
+    }
+
+    // Update PDF if new file is uploaded
+    if (req.files && req.files['pdf']) {
+      updateData.pdf = req.files['pdf'][0].path;
+    }
+
+    const updatedBook = await Book.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedBook) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    res.json(updatedBook);
+  } catch (error) {
+    console.error('Update Book Error:', error);
+    res.status(400).json({ message: 'Error updating book', error: error.message });
+  }
+});
+
+// DELETE book
+app.delete('/api/ebooks/:id', async (req, res) => {
+  try {
+    const book = await Book.findByIdAndDelete(req.params.id);
+    
+    if (!book) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+    
+    // Optional: Delete files from Cloudinary
+    if (book.thumbnail) {
+      await cloudinary.uploader.destroy(
+        book.thumbnail.split('/').pop().split('.')[0],
+        { resource_type: 'image' }
+      );
+    }
+    
+    if (book.pdf) {
+      await cloudinary.uploader.destroy(
+        book.pdf.split('/').pop().split('.')[0],
+        { resource_type: 'raw' }
+      );
+    }
+
+    res.json({ message: 'Book deleted successfully' });
+  } catch (error) {
+    console.error('Delete Book Error:', error);
+    res.status(500).json({ message: 'Error deleting book', error: error.message });
+  }
+});
+
+
+
+// ✅ Create a new test (POST)
+app.post('/api/tests', validateTest, async (req, res) => {
+  try {
+    const newTest = new Test(req.body);
+    await newTest.save();
+    res.status(201).json(newTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ Get all tests (Only basic info)
+app.get('/api/tests', async (req, res) => {
+  try {
+    const tests = await Test.find().select('title topic description duration questionCount');
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ✅ Get a specific test (Detailed info)
+app.get('/api/tests/:id', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) return res.status(404).json({ message: 'Test not found' });
+
+    const formattedTest = {
+      title: test.title,
+      topic: test.topic,
+      description: test.description,
+      duration: test.duration,
+      questionCount: test.questions.length,
+      questions: test.questions.map((q, index) => ({
+        number: index + 1,
+        questionText: q.questionText,
+        options: {
+          option1: q.options.option1,
+          option2: q.options.option2,
+          option3: q.options.option3,
+          option4: q.options.option4
+        },
+        correctOption: q.correctOption,
+        solution: q.solution
+      }))
+    };
+
+    res.json(formattedTest);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ✅ Update a test (PUT)
+app.put('/api/tests/:id', validateTest, async (req, res) => {
+  try {
+    const updatedTest = await Test.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedTest) return res.status(404).json({ message: 'Test not found' });
+
+    res.json(updatedTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// ✅ Delete a test (DELETE)
+app.delete('/api/tests/:id', async (req, res) => {
+  try {
+    const deletedTest = await Test.findByIdAndDelete(req.params.id);
+
+    if (!deletedTest) return res.status(404).json({ message: 'Test not found' });
+
+    res.json({ message: 'Test deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Routes
+
+// Create a new test
+app.post('/api/tests', validateTest, async (req, res) => {
+  try {
+    const newTest = new Test(req.body);
+    await newTest.save();
+    res.status(201).json(newTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all tests
+app.get('/api/tests', async (req, res) => {
+  try {
+    const tests = await Test.find().select('-questions');
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a specific test by ID
+app.get('/api/tests/:id', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+    res.json(test);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update a test
+app.put('/api/tests/:id', validateTest, async (req, res) => {
+  try {
+    const updatedTest = await Test.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedTest) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+
+    res.json(updatedTest);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete a test
+app.delete('/api/tests/:id', async (req, res) => {
+  try {
+    const deletedTest = await Test.findByIdAndDelete(req.params.id);
+
+    if (!deletedTest) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+
+    res.json({ message: 'Test deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Additional route for getting test details with full questions
+app.get('/api/tests/:id/details', async (req, res) => {
+  try {
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ message: 'Test not found' });
+    }
+    res.json({
+      title: test.title,
+      duration: test.duration,
+      questionCount: test.questions.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
   
   // Vercel Serverless Configuration
   if (process.env.VERCEL) {
