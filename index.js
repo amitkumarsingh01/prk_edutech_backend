@@ -9,11 +9,14 @@ const multer = require('multer');
 const { body, validationResult } = require('express-validator');  
 const path = require('path');
 const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+
+let sources = [];
 
 // Middleware
 app.use(cors());
@@ -24,6 +27,18 @@ const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+const notesDir = path.join(uploadsDir, 'notes');
+const notesThumbnailDir = path.join(notesDir, 'thumbnails');
+const notesPdfDir = path.join(notesDir, 'pdf');
+
+[notesDir, notesThumbnailDir, notesPdfDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+
 
 app.use('/uploads', express.static(uploadsDir));
 
@@ -39,31 +54,25 @@ mongoose.connect('mongodb://127.0.0.1:27017/prk_edutech', {
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    // Create subdirectories for different file types
-    let subDir = '';
-    switch(file.fieldname) {
-      case 'thumbnail':
-        subDir = 'thumbnails';
-        break;
-      case 'pdf':
-        subDir = 'pdfs';
-        break;
-      default:
-        subDir = 'others';
+    let finalDir;
+    if (file.fieldname === 'thumbnail') {
+      finalDir = notesThumbnailDir;
+    } else if (file.fieldname === 'pdf') {
+      finalDir = notesPdfDir;
+    } else {
+      finalDir = notesDir;
     }
-    
-    const finalDir = path.join(uploadsDir, subDir);
-    
-    // Create subdirectory if it doesn't exist
-    if (!fs.existsSync(finalDir)) {
-      fs.mkdirSync(finalDir, { recursive: true });
-    }
-    
     cb(null, finalDir);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename
-    cb(null, `${Date.now()}-${file.originalname}`);
+    // Generate unique ID for the note
+    const noteId = uuidv4();
+    
+    // Determine file extension
+    const ext = path.extname(file.originalname);
+    
+    // Create filename based on note ID and original extension
+    cb(null, `${noteId}${ext}`);
   }
 });
 
@@ -87,7 +96,6 @@ const multiUpload = upload.fields([
   { name: 'thumbnail', maxCount: 1 }, 
   { name: 'pdf', maxCount: 1 }
 ]);
-
 
 // Mongoose Schema Definitions
 
@@ -164,6 +172,173 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const resourceSchema = new mongoose.Schema({
+  title: { 
+      type: String, 
+      required: true,
+      trim: true
+  },
+  description: { 
+      type: String, 
+      required: true 
+  },
+  imageUrl: { 
+      type: String, 
+      validate: {
+          validator: function(v) {
+              return /^https?:\/\/.+/.test(v);
+          },
+          message: props => `${props.value} is not a valid URL!`
+      }
+  },
+  pdfUrl: { 
+      type: String, 
+      validate: {
+          validator: function(v) {
+              return /^https?:\/\/.+\.pdf$/.test(v);
+          },
+          message: props => `${props.value} is not a valid PDF URL!`
+      }
+  },
+  contentType: {
+      type: String, 
+      enum: ['ebook', 'notes', 'other'],
+      default: 'other'
+  },
+  author: { 
+      type: String, 
+      required: true 
+  },
+  subject: { 
+      type: String, 
+      required: true 
+  },
+  pricing: {
+      type: String,
+      enum: ['free', 'paid'],
+      default: 'free'
+  },
+  difficultyLevel: {
+      type: String,
+      enum: ['beginner', 'intermediate', 'advanced', 'expert'],
+      default: 'beginner'
+  },
+  createdAt: { 
+      type: Date, 
+      default: Date.now 
+  }
+});
+
+const leaderboardSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  designation: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  phoneNo: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  website: {
+    type: String,
+    trim: true
+  }
+}, { 
+  timestamps: true 
+});
+
+const QuizQuestionSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  question: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  answer: {
+    type: String,
+    required: true,
+    trim: true
+  }
+}, { timestamps: true });
+
+
+
+const VideoSchema = new mongoose.Schema({
+  title: { 
+      type: String, 
+      required: true,
+      trim: true
+  },
+  videoUrl: { 
+      type: String, 
+      required: true,
+      validate: {
+          validator: function(v) {
+              return /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(v);
+          },
+          message: props => `${props.value} is not a valid URL!`
+      }
+  },
+  description: { 
+      type: String, 
+      default: '' 
+  },
+  author: { 
+      type: String, 
+      required: true 
+  },
+  chapterName: { 
+      type: String, 
+      default: '' 
+  },
+  thumbnailUrl: { 
+      type: String,
+      validate: {
+          validator: function(v) {
+              return v === '' || /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(v);
+          },
+          message: props => `${props.value} is not a valid URL!`
+      }
+  },
+  isFree: { 
+      type: Boolean, 
+      default: true 
+  },
+  isLive: { 
+      type: Boolean, 
+      default: false 
+  },
+  isYoutubeLive: { 
+      type: Boolean, 
+      default: false 
+  },
+  createdTime: { 
+      type: Date, 
+      default: Date.now 
+  }
+}, {
+  timestamps: true
+});
+
+
 // Batch Schema
 const batchSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -176,94 +351,138 @@ const batchSchema = new mongoose.Schema({
 });
 
 // Course Schema
+// const courseSchema = new mongoose.Schema({
+//   title: { 
+//     type: String, 
+//     required: true 
+//   },
+//   courseId: { 
+//     type: String, 
+//     required: true, 
+//     unique: true 
+//   },
+//   duration: { 
+//     type: String, 
+//     required: true 
+//   },
+//   instructorName: { 
+//     type: String, 
+//     required: true 
+//   },
+//   thumbnail: { 
+//     type: String 
+//   },
+//   language: { 
+//     type: String, 
+//     required: true 
+//   },
+//   access: { 
+//     type: String, 
+//     enum: ['online', 'offline', 'both'], 
+//     required: true 
+//   },
+//   startDate: { 
+//     type: Date, 
+//     required: true 
+//   },
+//   endDate: { 
+//     type: Date, 
+//     required: true 
+//   },
+//   about: { 
+//     type: String, 
+//     required: true 
+//   },
+//   keyFeatures: [{ 
+//     type: String 
+//   }],
+//   isFree: { 
+//     type: Boolean, 
+//     default: false 
+//   },
+//   price: { 
+//     type: Number, 
+//     default: 0 
+//   },
+//   totalEnrollments: { 
+//     type: Number, 
+//     default: 0 
+//   },
+//   difficulty: { 
+//     type: String, 
+//     enum: ['Beginner', 'Intermediate', 'Advanced'], 
+//     default: 'Beginner' 
+//   },
+//   createdBy: { 
+//     type: mongoose.Schema.Types.ObjectId, 
+//     ref: 'User' 
+//   },
+//   createdAt: { 
+//     type: Date, 
+//     default: Date.now 
+//   },
+//   updatedAt: { 
+//     type: Date, 
+//     default: Date.now 
+//   }
+// }, { 
+//   timestamps: true 
+// });
+
 const courseSchema = new mongoose.Schema({
-  title: { 
-    type: String, 
-    required: true 
+  courseName: {
+    type: String,
+    required: true,
+    trim: true
   },
-  courseId: { 
-    type: String, 
-    required: true, 
-    unique: true 
+  description: {
+    type: String,
+    required: true
   },
-  duration: { 
-    type: String, 
-    required: true 
+  instructorName: {
+    type: String,
+    required: true
   },
-  instructorName: { 
-    type: String, 
-    required: true 
+  duration: {
+    type: String,
+    required: true
   },
-  thumbnail: { 
-    type: String 
+  startDate: {
+    type: Date,
+    required: true
   },
-  language: { 
-    type: String, 
-    required: true 
+  endDate: {
+    type: Date,
+    required: true
   },
-  access: { 
-    type: String, 
-    enum: ['online', 'offline', 'both'], 
-    required: true 
+  imageUrl: {
+    type: String,
+    default: ''
   },
-  startDate: { 
-    type: Date, 
-    required: true 
+  language: {
+    type: String,
+    required: true
   },
-  endDate: { 
-    type: Date, 
-    required: true 
+  mode: {
+    type: String,
+    enum: ['online', 'offline', 'both'],
+    required: true
   },
-  about: { 
-    type: String, 
-    required: true 
+  topCourse: {
+    type: Boolean,
+    default: false
   },
-  keyFeatures: [{ 
-    type: String 
-  }],
-  isFree: { 
-    type: Boolean, 
-    default: false 
+  paid: {
+    type: Boolean,
+    default: false
   },
-  price: { 
-    type: Number, 
-    default: 0 
-  },
-  totalEnrollments: { 
-    type: Number, 
-    default: 0 
-  },
-  difficulty: { 
-    type: String, 
-    enum: ['Beginner', 'Intermediate', 'Advanced'], 
-    default: 'Beginner' 
-  },
-  createdBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
-  },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
-}, { 
-  timestamps: true 
 });
 
-// Pre-save hook to generate unique courseId if not provided
-courseSchema.pre('save', async function(next) {
-  if (!this.courseId) {
-    const prefix = this.title.slice(0, 3).toUpperCase();
-    const randomSuffix = Math.random().toString(36).substring(2, 7).toUpperCase();
-    this.courseId = `${prefix}-${randomSuffix}`;
-  }
-  next();
-});
-
+// Pre-save hook to generate unique courseId if not provide
 // Course Item Schema
 const courseItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -273,32 +492,6 @@ const courseItemSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Course',
     required: true
-  }
-});
-
-
-const VideoSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String
-  },
-  author: {
-    type: String,
-    required: true
-  },
-  videoPath: {
-    type: String,
-    required: true
-  },
-  thumbnailPath: {
-    type: String
-  },
-  uploadDate: {
-    type: Date,
-    default: Date.now
   }
 });
 
@@ -323,13 +516,55 @@ const NotesSchema = new mongoose.Schema({
   thumbnailPath: { 
     type: String 
   },
+  type: {
+    type: String,
+    enum: ['Notes', 'Books'],
+    required: true
+  },
+  noteId: {
+    type: String,
+    unique: true,
+    required: true
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 
   }
 });
 
+NotesSchema.pre('save', function(next) {
+  if (this.isNew) {
+    // Generate a single random string for both pdf and thumbnail
+    this.noteId = generateRandomString();
 
+    // Rename PDF file
+    if (this.pdfPath) {
+      const oldPath = this.pdfPath;
+      const ext = path.extname(oldPath);
+      const newPdfPath = path.join(
+        path.dirname(oldPath), 
+        `${this.noteId}${ext}`
+      );
+      
+      fs.renameSync(oldPath, newPdfPath);
+      this.pdfPath = newPdfPath;
+    }
+
+    // Rename Thumbnail file
+    if (this.thumbnailPath) {
+      const oldPath = this.thumbnailPath;
+      const ext = path.extname(oldPath);
+      const newThumbnailPath = path.join(
+        path.dirname(oldPath), 
+        `${this.noteId}${ext}`
+      );
+      
+      fs.renameSync(oldPath, newThumbnailPath);
+      this.thumbnailPath = newThumbnailPath;
+    }
+  }
+  next();
+});
 
 
 // Assignment Schema
@@ -395,6 +630,8 @@ const testSchema = new mongoose.Schema({
   topic: { type: String, required: true }, // New field
   description: { type: String, required: true }, // New field
   duration: { type: Number, required: true },
+  smartTest: { type: Boolean, required: true }, // New field
+  userType: { type: String, enum: ["free", "premium"], required: true },
   questions: [
     {
       questionText: { type: String, required: true },
@@ -478,6 +715,9 @@ const Book = mongoose.model('Book', bookSchema);
 const Test = mongoose.model('Test', testSchema);
 const Video = mongoose.model('Video', VideoSchema);
 const Notes = mongoose.model('Notes', NotesSchema);
+const QuizQuestion = mongoose.model('QuizQuestion', QuizQuestionSchema);
+const Leaderboard = mongoose.model('Leaderboard', leaderboardSchema);
+const Resource = mongoose.model('Resource', resourceSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -1279,280 +1519,361 @@ app.post('/api/profile/parents', authenticateToken, async (req, res) => {
   });
   
   // Course Management Routes
-  app.post('/api/courses', authenticateToken, upload.single('thumbnail'), async (req, res) => {
-    try {
-      // Check if user is admin
-      // if (req.user.userType !== 'admin') {
-      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      // }
+  // app.post('/api/courses', authenticateToken, upload.single('thumbnail'), async (req, res) => {
+  //   try {
+  //     // Check if user is admin
+  //     // if (req.user.userType !== 'admin') {
+  //     //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+  //     // }
   
-      // Upload thumbnail to Cloudinary
-      let thumbnailPath = '';
-      if (req.files && req.files.thumbnail) {
-        thumbnailPath = req.files.thumbnail[0].path;
-        // Store relative path in database
-        course.thumbnail = `/uploads/thumbnails/${path.basename(thumbnailPath)}`;
-      }
+  //     // Upload thumbnail to Cloudinary
+  //     let thumbnailPath = '';
+  //     if (req.files && req.files.thumbnail) {
+  //       thumbnailPath = req.files.thumbnail[0].path;
+  //       // Store relative path in database
+  //       course.thumbnail = `/uploads/thumbnails/${path.basename(thumbnailPath)}`;
+  //     }
   
-      // Prepare course data
-      const courseData = {
-        title: req.body.title,
-        courseId: req.body.courseId, // Allow custom courseId
-        duration: req.body.duration,
-        instructorName: req.body.instructorName,
-        thumbnail: thumbnailUrl,
-        language: req.body.language,
-        access: req.body.access,
-        startDate: req.body.startDate,
-        endDate: req.body.endDate,
-        about: req.body.about,
-        keyFeatures: req.body.keyFeatures ? JSON.parse(req.body.keyFeatures) : [],
-        isFree: req.body.isFree === 'true',
-        price: req.body.price || 0,
-        difficulty: req.body.difficulty || 'Beginner',
-        createdBy: req.user.userId
-      };
+  //     // Prepare course data
+  //     const courseData = {
+  //       title: req.body.title,
+  //       courseId: req.body.courseId, // Allow custom courseId
+  //       duration: req.body.duration,
+  //       instructorName: req.body.instructorName,
+  //       thumbnail: thumbnailUrl,
+  //       language: req.body.language,
+  //       access: req.body.access,
+  //       startDate: req.body.startDate,
+  //       endDate: req.body.endDate,
+  //       about: req.body.about,
+  //       keyFeatures: req.body.keyFeatures ? JSON.parse(req.body.keyFeatures) : [],
+  //       isFree: req.body.isFree === 'true',
+  //       price: req.body.price || 0,
+  //       difficulty: req.body.difficulty || 'Beginner',
+  //       createdBy: req.user.userId
+  //     };
   
-      const course = new Course(courseData);
-      await course.save();
+  //     const course = new Course(courseData);
+  //     await course.save();
   
-      res.status(201).json(course);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  });
+  //     res.status(201).json(course);
+  //   } catch (error) {
+  //     res.status(400).json({ message: error.message });
+  //   }
+  // });
   
-  // Get all courses (authenticated users)
-  app.get('/api/courses', authenticateToken, async (req, res) => {
+  // // Get all courses (authenticated users)
+  // app.get('/api/courses', authenticateToken, async (req, res) => {
+  //   try {
+  //     const courses = await Course.find();
+  //     res.json(courses);
+  //   } catch (error) {
+  //     res.status(500).json({ message: error.message });
+  //   }
+  // });
+  
+  // // Get single course by ID (authenticated users)
+  // app.get('/api/courses/:id', authenticateToken, async (req, res) => {
+  //   try {
+  //     const course = await Course.findById(req.params.id);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
+  //     res.json(course);
+  //   } catch (error) {
+  //     res.status(500).json({ message: error.message });
+  //   }
+  // });
+  
+  // // Update a course (Admin only)
+  // app.put('/api/courses/:id', authenticateToken, upload.single('thumbnail'), async (req, res) => {
+  //   try {
+  //     // Check if user is admin
+  //     // if (req.user.userType !== 'admin') {
+  //     //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+  //     // }
+  
+  //     const courseId = req.params.id;
+  //     const course = await Course.findById(courseId);
+  
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
+  
+  //     // Handle thumbnail upload
+  //     if (req.files && req.files.pdf) {
+  //       const pdfPath = req.files.pdf[0].path;
+  //       course.pdf = `/uploads/pdfs/${path.basename(pdfPath)}`;
+  //     }
+  
+  //     // Update course fields
+  //     course.title = req.body.title || course.title;
+  //     course.duration = req.body.duration || course.duration;
+  //     course.instructorName = req.body.instructorName || course.instructorName;
+  //     course.language = req.body.language || course.language;
+  //     course.access = req.body.access || course.access;
+  //     course.startDate = req.body.startDate || course.startDate;
+  //     course.endDate = req.body.endDate || course.endDate;
+  //     course.about = req.body.about || course.about;
+  //     course.keyFeatures = req.body.keyFeatures 
+  //       ? JSON.parse(req.body.keyFeatures) 
+  //       : course.keyFeatures;
+  //     course.isFree = req.body.isFree !== undefined 
+  //       ? req.body.isFree === 'true' 
+  //       : course.isFree;
+  //     course.price = req.body.price || course.price;
+  //     course.difficulty = req.body.difficulty || course.difficulty;
+  //     course.updatedAt = new Date();
+  
+  //     await course.save();
+  //     res.json(course);
+  //   } catch (error) {
+  //     res.status(400).json({ message: error.message });
+  //   }
+  // });
+  
+  // // Delete a course (Admin only)
+  // app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
+  //   try {
+  //     // Check if user is admin
+  //     // if (req.user.userType !== 'admin') {
+  //     //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
+  //     // }
+  
+  //     const course = await Course.findByIdAndDelete(req.params.id);
+  //     if (!course) {
+  //       return res.status(404).json({ message: 'Course not found' });
+  //     }
+  
+  //     res.json({ message: 'Course deleted successfully' });
+  //   } catch (error) {
+  //     res.status(500).json({ message: error.message });
+  //   }
+  // });
+
+  // // // Get all courses
+  // // app.get('/api/courses', authenticateToken, async (req, res) => {
+  // //   try {
+  // //     const courses = await Course.find();
+  // //     res.json(courses);
+  // //   } catch (error) {
+  // //     console.error('Error fetching courses:', error);
+  // //     res.status(500).json({ message: 'Server error while fetching courses' });
+  // //   }
+  // // });
+  
+  // // // Get course by ID
+  // // app.get('/api/courses/:id', authenticateToken, async (req, res) => {
+  // //   try {
+  // //     const course = await Course.findById(req.params.id);
+      
+  // //     if (!course) {
+  // //       return res.status(404).json({ message: 'Course not found' });
+  // //     }
+      
+  // //     // Get course items for this course
+  // //     const courseItems = await CourseItem.find({ courseId: course._id });
+      
+  // //     res.json({
+  // //       course,
+  // //       courseItems
+  // //     });
+  // //   } catch (error) {
+  // //     console.error('Error fetching course:', error);
+  // //     res.status(500).json({ message: 'Server error while fetching course' });
+  // //   }
+  // // });
+  
+
+  // // app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
+  // //   try {
+  // //     const { name, courseId, description } = req.body;
+      
+  // //     // Check if course with this ID already exists
+  // //     const existingCourse = await Course.findOne({ courseId });
+  // //     if (existingCourse) {
+  // //       return res.status(400).json({ message: 'Course with this ID already exists' });
+  // //     }
+      
+  // //     const newCourse = new Course({
+  // //       name,
+  // //       courseId,
+  // //       description,
+  // //       image: req.file ? req.file.path : null
+  // //     });
+      
+  // //     await newCourse.save();
+      
+  // //     res.status(201).json({
+  // //       message: 'Course created successfully',
+  // //       course: newCourse
+  // //     });
+  // //   } catch (error) {
+  // //     console.error('Error creating course:', error);
+  // //     res.status(500).json({ message: 'Server error while creating course' });
+  // //   }
+  // // });
+  
+  // // // Add course item
+  // // app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
+  // //   try {
+  // //     const { name, description } = req.body;
+  // //     const courseId = req.params.id;
+      
+  // //     // Check if course exists
+  // //     const course = await Course.findById(courseId);
+  // //     if (!course) {
+  // //       return res.status(404).json({ message: 'Course not found' });
+  // //     }
+      
+  // //     const newCourseItem = new CourseItem({
+  // //       name,
+  // //       description,
+  // //       image: req.file ? req.file.path : null,
+  // //       courseId
+  // //     });
+      
+  // //     await newCourseItem.save();
+      
+  // //     res.status(201).json({
+  // //       message: 'Course item created successfully',
+  // //       courseItem: newCourseItem
+  // //     });
+  // //   } catch (error) {
+  // //     console.error('Error creating course item:', error);
+  // //     res.status(500).json({ message: 'Server error while creating course item' });
+  // //   }
+  // // });
+  
+  // // // Add student to course
+  // // app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
+  // //   try {
+  // //     const { userId } = req.body;
+      
+  // //     const course = await Course.findById(req.params.id);
+  // //     if (!course) {
+  // //       return res.status(404).json({ message: 'Course not found' });
+  // //     }
+      
+  // //     const user = await User.findById(userId);
+  // //     if (!user) {
+  // //       return res.status(404).json({ message: 'User not found' });
+  // //     }
+      
+  // //     // Check if user already has this course
+  // //     if (user.courses.includes(course._id)) {
+  // //       return res.status(400).json({ message: 'User already enrolled in this course' });
+  // //     }
+      
+  // //     // Add course to user
+  // //     user.courses.push(course._id);
+  // //     await user.save();
+      
+  // //     // Create notification for user
+  // //     user.notifications.push({
+  // //       message: `You have been enrolled in course: ${course.name}`,
+  // //       date: new Date(),
+  // //       read: false
+  // //     });
+      
+  // //     await user.save();
+      
+  // //     res.json({
+  // //       message: 'Student enrolled in course successfully',
+  // //       courseId: course._id,
+  // //       userId: user._id
+  // //     });
+  // //   } catch (error) {
+  // //     console.error('Error enrolling student in course:', error);
+  // //     res.status(500).json({ message: 'Server error while enrolling student in course' });
+  // //   }
+  // // });
+  
+  // // Test Performance Routes  
+  
+  // Assignment Routes
+  
+  app.get('/api/courses', async (req, res) => {
     try {
       const courses = await Course.find();
       res.json(courses);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
     }
   });
   
-  // Get single course by ID (authenticated users)
-  app.get('/api/courses/:id', authenticateToken, async (req, res) => {
+  // GET a single course by ID
+  app.get('/api/courses/:id', async (req, res) => {
     try {
       const course = await Course.findById(req.params.id);
       if (!course) {
         return res.status(404).json({ message: 'Course not found' });
       }
       res.json(course);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
     }
   });
   
-  // Update a course (Admin only)
-  app.put('/api/courses/:id', authenticateToken, upload.single('thumbnail'), async (req, res) => {
+  // POST create a new course
+  app.post('/api/courses', async (req, res) => {
+    const course = new Course({
+      courseName: req.body.courseName,
+      description: req.body.description,
+      instructorName: req.body.instructorName,
+      duration: req.body.duration,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      imageUrl: req.body.imageUrl || '',
+      language: req.body.language,
+      mode: req.body.mode,
+      topCourse: req.body.topCourse || false,
+      paid: req.body.paid || false
+    });
+  
     try {
-      // Check if user is admin
-      // if (req.user.userType !== 'admin') {
-      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      // }
+      const newCourse = await course.save();
+      res.status(201).json(newCourse);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
+  });
   
-      const courseId = req.params.id;
-      const course = await Course.findById(courseId);
+  // PUT update a course
+  app.put('/api/courses/:id', async (req, res) => {
+    try {
+      const updatedCourse = await Course.findByIdAndUpdate(
+        req.params.id, 
+        req.body, 
+        { new: true, runValidators: true }
+      );
   
-      if (!course) {
+      if (!updatedCourse) {
         return res.status(404).json({ message: 'Course not found' });
       }
   
-      // Handle thumbnail upload
-      if (req.files && req.files.pdf) {
-        const pdfPath = req.files.pdf[0].path;
-        course.pdf = `/uploads/pdfs/${path.basename(pdfPath)}`;
-      }
-  
-      // Update course fields
-      course.title = req.body.title || course.title;
-      course.duration = req.body.duration || course.duration;
-      course.instructorName = req.body.instructorName || course.instructorName;
-      course.language = req.body.language || course.language;
-      course.access = req.body.access || course.access;
-      course.startDate = req.body.startDate || course.startDate;
-      course.endDate = req.body.endDate || course.endDate;
-      course.about = req.body.about || course.about;
-      course.keyFeatures = req.body.keyFeatures 
-        ? JSON.parse(req.body.keyFeatures) 
-        : course.keyFeatures;
-      course.isFree = req.body.isFree !== undefined 
-        ? req.body.isFree === 'true' 
-        : course.isFree;
-      course.price = req.body.price || course.price;
-      course.difficulty = req.body.difficulty || course.difficulty;
-      course.updatedAt = new Date();
-  
-      await course.save();
-      res.json(course);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
+      res.json(updatedCourse);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
     }
   });
   
-  // Delete a course (Admin only)
-  app.delete('/api/courses/:id', authenticateToken, async (req, res) => {
+  // DELETE a course
+  app.delete('/api/courses/:id', async (req, res) => {
     try {
-      // Check if user is admin
-      // if (req.user.userType !== 'admin') {
-      //   return res.status(403).json({ message: 'Unauthorized. Admin access required.' });
-      // }
+      const deletedCourse = await Course.findByIdAndDelete(req.params.id);
   
-      const course = await Course.findByIdAndDelete(req.params.id);
-      if (!course) {
+      if (!deletedCourse) {
         return res.status(404).json({ message: 'Course not found' });
       }
   
       res.json({ message: 'Course deleted successfully' });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
     }
   });
 
-  // // Get all courses
-  // app.get('/api/courses', authenticateToken, async (req, res) => {
-  //   try {
-  //     const courses = await Course.find();
-  //     res.json(courses);
-  //   } catch (error) {
-  //     console.error('Error fetching courses:', error);
-  //     res.status(500).json({ message: 'Server error while fetching courses' });
-  //   }
-  // });
-  
-  // // Get course by ID
-  // app.get('/api/courses/:id', authenticateToken, async (req, res) => {
-  //   try {
-  //     const course = await Course.findById(req.params.id);
-      
-  //     if (!course) {
-  //       return res.status(404).json({ message: 'Course not found' });
-  //     }
-      
-  //     // Get course items for this course
-  //     const courseItems = await CourseItem.find({ courseId: course._id });
-      
-  //     res.json({
-  //       course,
-  //       courseItems
-  //     });
-  //   } catch (error) {
-  //     console.error('Error fetching course:', error);
-  //     res.status(500).json({ message: 'Server error while fetching course' });
-  //   }
-  // });
-  
 
-  // app.post('/api/courses', authenticateToken, upload.single('image'), async (req, res) => {
-  //   try {
-  //     const { name, courseId, description } = req.body;
-      
-  //     // Check if course with this ID already exists
-  //     const existingCourse = await Course.findOne({ courseId });
-  //     if (existingCourse) {
-  //       return res.status(400).json({ message: 'Course with this ID already exists' });
-  //     }
-      
-  //     const newCourse = new Course({
-  //       name,
-  //       courseId,
-  //       description,
-  //       image: req.file ? req.file.path : null
-  //     });
-      
-  //     await newCourse.save();
-      
-  //     res.status(201).json({
-  //       message: 'Course created successfully',
-  //       course: newCourse
-  //     });
-  //   } catch (error) {
-  //     console.error('Error creating course:', error);
-  //     res.status(500).json({ message: 'Server error while creating course' });
-  //   }
-  // });
-  
-  // // Add course item
-  // app.post('/api/courses/:id/items', authenticateToken, upload.single('image'), async (req, res) => {
-  //   try {
-  //     const { name, description } = req.body;
-  //     const courseId = req.params.id;
-      
-  //     // Check if course exists
-  //     const course = await Course.findById(courseId);
-  //     if (!course) {
-  //       return res.status(404).json({ message: 'Course not found' });
-  //     }
-      
-  //     const newCourseItem = new CourseItem({
-  //       name,
-  //       description,
-  //       image: req.file ? req.file.path : null,
-  //       courseId
-  //     });
-      
-  //     await newCourseItem.save();
-      
-  //     res.status(201).json({
-  //       message: 'Course item created successfully',
-  //       courseItem: newCourseItem
-  //     });
-  //   } catch (error) {
-  //     console.error('Error creating course item:', error);
-  //     res.status(500).json({ message: 'Server error while creating course item' });
-  //   }
-  // });
-  
-  // // Add student to course
-  // app.post('/api/courses/:id/students', authenticateToken, async (req, res) => {
-  //   try {
-  //     const { userId } = req.body;
-      
-  //     const course = await Course.findById(req.params.id);
-  //     if (!course) {
-  //       return res.status(404).json({ message: 'Course not found' });
-  //     }
-      
-  //     const user = await User.findById(userId);
-  //     if (!user) {
-  //       return res.status(404).json({ message: 'User not found' });
-  //     }
-      
-  //     // Check if user already has this course
-  //     if (user.courses.includes(course._id)) {
-  //       return res.status(400).json({ message: 'User already enrolled in this course' });
-  //     }
-      
-  //     // Add course to user
-  //     user.courses.push(course._id);
-  //     await user.save();
-      
-  //     // Create notification for user
-  //     user.notifications.push({
-  //       message: `You have been enrolled in course: ${course.name}`,
-  //       date: new Date(),
-  //       read: false
-  //     });
-      
-  //     await user.save();
-      
-  //     res.json({
-  //       message: 'Student enrolled in course successfully',
-  //       courseId: course._id,
-  //       userId: user._id
-  //     });
-  //   } catch (error) {
-  //     console.error('Error enrolling student in course:', error);
-  //     res.status(500).json({ message: 'Server error while enrolling student in course' });
-  //   }
-  // });
-  
-  // Test Performance Routes  
-  
-  // Assignment Routes
-  
   // Get all assignments for a user
   app.get('/api/assignments', authenticateToken, async (req, res) => {
     try {
@@ -2385,11 +2706,33 @@ app.delete('/api/ebooks/:id', async (req, res) => {
 // ✅ Create a new test (POST)
 app.post('/api/tests', validateTest, async (req, res) => {
   try {
-    const newTest = new Test(req.body);
+    const { title, topic, description, duration, smartTest, userType, questions } = req.body;
+
+    // Ensure userType is valid
+    if (!["free", "premium"].includes(userType)) {
+      return res.status(400).json({ message: "Invalid userType. Must be 'free' or 'premium'." });
+    }
+
+    // Ensure smartTest is boolean
+    if (typeof smartTest !== "boolean") {
+      return res.status(400).json({ message: "smartTest must be true or false." });
+    }
+
+    const newTest = new Test({
+      title,
+      topic,
+      description,
+      duration,
+      smartTest,
+      userType,
+      questions
+    });
+
     await newTest.save();
     res.status(201).json(newTest);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error("Error creating test:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
@@ -2552,109 +2895,9 @@ app.get('/api/tests/:id/details', async (req, res) => {
   }
 });
 
-app.post('/api/videos', multiUpload, async (req, res) => {
-  try {
-    const { name, description, author, title } = req.body;
-    
-    // Check if thumbnail was uploaded
-    const thumbnailPath = req.files && req.files.thumbnail 
-      ? req.files.thumbnail[0].path 
-      : null;
-
-    const newVideo = new Video({
-      name,
-      description,
-      author,
-      title,
-      thumbnailPath
-    });
-
-    const savedVideo = await newVideo.save();
-    res.status(201).json(savedVideo);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Get all videos
-app.get('/api/videos', async (req, res) => {
-  try {
-    const videos = await Video.find();
-    res.json(videos);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get a single video by ID
-app.get('/api/videos/:id', async (req, res) => {
-  try {
-    const video = await Video.findById(req.params.id);
-    if (!video) {
-      return res.status(404).json({ message: 'Video not found' });
-    }
-    res.json(video);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Update a video
-app.put('/api/videos/:id', multiUpload, async (req, res) => {
-  try {
-    const { name, description, author, title } = req.body;
-    
-    const updateData = {
-      name,
-      description,
-      author,
-      title
-    };
-
-    // Update thumbnail if new one is uploaded
-    if (req.files && req.files.thumbnail) {
-      updateData.thumbnailPath = req.files.thumbnail[0].path;
-    }
-
-    const updatedVideo = await Video.findByIdAndUpdate(
-      req.params.id, 
-      updateData, 
-      { new: true }
-    );
-
-    if (!updatedVideo) {
-      return res.status(404).json({ message: 'Video not found' });
-    }
-
-    res.json(updatedVideo);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-// Delete a video
-app.delete('/api/videos/:id', async (req, res) => {
-  try {
-    const deletedVideo = await Video.findByIdAndDelete(req.params.id);
-    
-    if (!deletedVideo) {
-      return res.status(404).json({ message: 'Video not found' });
-    }
-
-    // Optional: Delete associated thumbnail file
-    if (deletedVideo.thumbnailPath) {
-      fs.unlinkSync(deletedVideo.thumbnailPath);
-    }
-
-    res.json({ message: 'Video deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
 app.post('/api/notes', multiUpload, async (req, res) => {
   try {
-    const { course, topic, chapterName } = req.body;
+    const { course, topic, chapterName, type } = req.body;
     
     // Check if PDF and thumbnail were uploaded
     const pdfPath = req.files && req.files.pdf 
@@ -2670,7 +2913,8 @@ app.post('/api/notes', multiUpload, async (req, res) => {
       topic,
       chapterName,
       pdfPath,
-      thumbnailPath
+      thumbnailPath,
+      type
     });
 
     const savedNote = await newNote.save();
@@ -2681,7 +2925,7 @@ app.post('/api/notes', multiUpload, async (req, res) => {
 });
 
 // Get all notes
-app.get('/notes', async (req, res) => {
+app.get('/api/notes', async (req, res) => {
   try {
     const notes = await Notes.find();
     res.json(notes);
@@ -2691,7 +2935,7 @@ app.get('/notes', async (req, res) => {
 });
 
 // Get notes by course
-app.get('/notes/course/:courseName', async (req, res) => {
+app.get('/api/notes/course/:courseName', async (req, res) => {
   try {
     const notes = await Notes.find({ course: req.params.courseName });
     res.json(notes);
@@ -2701,7 +2945,7 @@ app.get('/notes/course/:courseName', async (req, res) => {
 });
 
 // Get a single note by ID
-app.get('/notes/:id', async (req, res) => {
+app.get('/api/notes/:id', async (req, res) => {
   try {
     const note = await Notes.findById(req.params.id);
     if (!note) {
@@ -2714,7 +2958,7 @@ app.get('/notes/:id', async (req, res) => {
 });
 
 // Update a note
-app.put('/notes/:id', multiUpload, async (req, res) => {
+app.put('/api/notes/:id', multiUpload, async (req, res) => {
   try {
     const { course, topic, chapterName } = req.body;
     
@@ -2751,7 +2995,7 @@ app.put('/notes/:id', multiUpload, async (req, res) => {
 });
 
 // Delete a note
-app.delete('/notes/:id', async (req, res) => {
+app.delete('/api/notes/:id', async (req, res) => {
   try {
     const deletedNote = await Notes.findByIdAndDelete(req.params.id);
     
@@ -2773,7 +3017,904 @@ app.delete('/notes/:id', async (req, res) => {
   }
 });
 
+// app.post('/api/videos/upload', 
+//   multiUpload,
+//   [
+//     body('title').not().isEmpty().withMessage('Title is required'),
+//     body('author').not().isEmpty().withMessage('Author is required')
+//   ],
+//   async (req, res) => {
+//     console.log('Files:', req.files);  // Debugging
+//     console.log('Body:', req.body);  // Debugging
+
+//     // Check validation errors
+//     const errors = validationResult(req);
+//     if (!errors.isEmpty()) {
+//       return res.status(400).json({ errors: errors.array() });
+//     }
+
+//     try {
+//       // Ensure req.files exists before accessing properties
+//       const thumbnailPath = req.files?.thumbnail ? req.files.thumbnail[0].path : null;
+//       const pdfPath = req.files?.pdf ? req.files.pdf[0].path : null;
+
+//       // Create new video entry
+//       const newVideo = new Video({
+//         title: req.body.title,
+//         description: req.body.description || '',
+//         author: req.body.author,
+//         thumbnailPath,
+//         pdfPath,
+//         isLive: req.body.isLive === 'true',
+//         isPaid: req.body.isPaid === 'true',
+//         price: parseFloat(req.body.price) || 0
+//       });
+
+//       await newVideo.save();
+
+//       res.status(201).json({
+//         message: 'Video uploaded successfully',
+//         video: newVideo
+//       });
+//     } catch (error) {
+//       console.error('Video upload error:', error);
+//       res.status(500).json({
+//         message: 'Server error',
+//         error: error.message
+//       });
+//     }
+//   }
+// );
+
+
+// // Get Videos Route
+// app.get('/api/videos', async (req, res) => {
+//   try {
+//     const { 
+//       page = 1, 
+//       limit = 10, 
+//       isLive, 
+//       isPaid 
+//     } = req.query;
+    
+//     // Build query filters
+//     const query = {};
+//     if (isLive !== undefined) query.isLive = isLive === 'true';
+//     if (isPaid !== undefined) query.isPaid = isPaid === 'true';
+
+//     const videos = await Video.find(query)
+//       .populate('author', 'username email') // Populate author details
+//       .limit(limit * 1)
+//       .skip((page - 1) * limit)
+//       .sort({ createdAt: -1 });
+
+//     const total = await Video.countDocuments(query);
+
+//     res.json({
+//       videos,
+//       totalPages: Math.ceil(total / limit),
+//       currentPage: page
+//     });
+//   } catch (error) {
+//     res.status(500).json({ 
+//       message: 'Server error', 
+//       error: error.message 
+//     });
+//   }
+// });
+
+// // Get Single Video Route
+// app.get('/api/videos/:id', async (req, res) => {
+//   try {
+//     const video = await Video.findById(req.params.id)
+//       .populate('author', 'username email');
+    
+//     if (!video) {
+//       return res.status(404).json({ message: 'Video not found' });
+//     }
+
+//     res.json(video);
+//   } catch (error) {
+//     res.status(500).json({ 
+//       message: 'Server error', 
+//       error: error.message 
+//     });
+//   }
+// });
+
+// // Update Video Route
+// app.put('/api/videos/:id', 
+//   multiUpload, 
+//   async (req, res) => {
+//     try {
+//       const videoId = req.params.id;
+//       const updateData = {
+//         title: req.body.title,
+//         description: req.body.description,
+//         isLive: req.body.isLive === 'true',
+//         isPaid: req.body.isPaid === 'true',
+//         price: parseFloat(req.body.price) || 0,
+//         videoUrl: req.body.videoUrl
+//       };
+
+//       // Handle file updates
+//       if (req.files) {
+//         if (req.files.thumbnail) {
+//           updateData.thumbnailPath = req.files.thumbnail[0].path;
+//         }
+//         if (req.files.video) {
+//           updateData.videoPath = req.files.video[0].path;
+//         }
+//       }
+
+//       const updatedVideo = await Video.findByIdAndUpdate(
+//         videoId, 
+//         updateData, 
+//         { new: true }
+//       );
+
+//       if (!updatedVideo) {
+//         return res.status(404).json({ message: 'Video not found' });
+//       }
+
+//       res.json({
+//         message: 'Video updated successfully',
+//         video: updatedVideo
+//       });
+//     } catch (error) {
+//       res.status(500).json({ 
+//         message: 'Server error', 
+//         error: error.message 
+//       });
+//     }
+//   }
+// );
+
+// // Delete Video Route
+// app.delete('/api/videos/:id', async (req, res) => {
+//   try {
+//     const video = await Video.findByIdAndDelete(req.params.id);
+    
+//     if (!video) {
+//       return res.status(404).json({ message: 'Video not found' });
+//     }
+
+//     // Optional: Remove associated files
+//     if (video.thumbnailPath) {
+//       fs.unlinkSync(video.thumbnailPath);
+//     }
+//     if (video.videoPath) {
+//       fs.unlinkSync(video.videoPath);
+//     }
+
+//     res.json({ message: 'Video deleted successfully' });
+//   } catch (error) {
+//     res.status(500).json({ 
+//       message: 'Server error', 
+//       error: error.message 
+//     });
+//   }
+// });
+
+app.post('/sources', (req, res) => {
+  const { sourceName, values } = req.body;
+
+  // Validate input
+  if (!sourceName) {
+      return res.status(400).json({ error: 'Source name is required' });
+  }
+
+  // Create source with unique ID and optional values
+  const newSource = {
+      id: uuidv4(),
+      sourceName,
+      values: values ? values.map(val => ({
+          id: uuidv4(),
+          value: val.value,
+          additionalInfo: val.additionalInfo || null
+      })) : []
+  };
+
+  sources.push(newSource);
+  res.status(201).json(newSource);
+});
+
+// READ all sources
+app.get('/sources', (req, res) => {
+  res.json(sources);
+});
+
+// READ a specific source by ID
+app.get('/sources/:sourceId', (req, res) => {
+  const source = sources.find(s => s.id === req.params.sourceId);
   
+  if (!source) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+  
+  res.json(source);
+});
+
+// UPDATE a source
+app.put('/sources/:sourceId', (req, res) => {
+  const { sourceName, values } = req.body;
+  const sourceIndex = sources.findIndex(s => s.id === req.params.sourceId);
+
+  if (sourceIndex === -1) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+
+  // Update source details
+  sources[sourceIndex] = {
+      ...sources[sourceIndex],
+      sourceName: sourceName || sources[sourceIndex].sourceName,
+      values: values ? values.map(val => ({
+          id: val.id || uuidv4(),
+          value: val.value,
+          additionalInfo: val.additionalInfo || null
+      })) : sources[sourceIndex].values
+  };
+
+  res.json(sources[sourceIndex]);
+});
+
+// DELETE a source
+app.delete('/sources/:sourceId', (req, res) => {
+  const sourceIndex = sources.findIndex(s => s.id === req.params.sourceId);
+
+  if (sourceIndex === -1) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+
+  sources.splice(sourceIndex, 1);
+  res.status(204).send();
+});
+
+// ADD a value to a specific source
+app.post('/sources/:sourceId/values', (req, res) => {
+  const { value, additionalInfo } = req.body;
+  const sourceIndex = sources.findIndex(s => s.id === req.params.sourceId);
+
+  if (sourceIndex === -1) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+
+  const newValue = {
+      id: uuidv4(),
+      value,
+      additionalInfo: additionalInfo || null
+  };
+
+  sources[sourceIndex].values.push(newValue);
+  res.status(201).json(newValue);
+});
+
+// UPDATE a specific value in a source
+app.put('/sources/:sourceId/values/:valueId', (req, res) => {
+  const { value, additionalInfo } = req.body;
+  const sourceIndex = sources.findIndex(s => s.id === req.params.sourceId);
+
+  if (sourceIndex === -1) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+
+  const valueIndex = sources[sourceIndex].values.findIndex(v => v.id === req.params.valueId);
+
+  if (valueIndex === -1) {
+      return res.status(404).json({ error: 'Value not found' });
+  }
+
+  sources[sourceIndex].values[valueIndex] = {
+      ...sources[sourceIndex].values[valueIndex],
+      value: value || sources[sourceIndex].values[valueIndex].value,
+      additionalInfo: additionalInfo || sources[sourceIndex].values[valueIndex].additionalInfo
+  };
+
+  res.json(sources[sourceIndex].values[valueIndex]);
+});
+
+// DELETE a specific value from a source
+app.delete('/sources/:sourceId/values/:valueId', (req, res) => {
+  const sourceIndex = sources.findIndex(s => s.id === req.params.sourceId);
+
+  if (sourceIndex === -1) {
+      return res.status(404).json({ error: 'Source not found' });
+  }
+
+  const valueIndex = sources[sourceIndex].values.findIndex(v => v.id === req.params.valueId);
+
+  if (valueIndex === -1) {
+      return res.status(404).json({ error: 'Value not found' });
+  }
+
+  sources[sourceIndex].values.splice(valueIndex, 1);
+  res.status(204).send();
+});
+
+
+app.post('/questions', async (req, res) => {
+  try {
+    const newQuestion = new QuizQuestion(req.body);
+    const savedQuestion = await newQuestion.save();
+    res.status(201).json(savedQuestion);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// READ - Get all questions
+app.get('/questions', async (req, res) => {
+  try {
+    const questions = await QuizQuestion.find();
+    res.json(questions);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// READ - Get a specific question by ID
+app.get('/questions/:id', async (req, res) => {
+  try {
+    const question = await QuizQuestion.findById(req.params.id);
+    if (!question) {
+      return res.status(404).json({ message: 'Question not found' });
+    }
+    res.json(question);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// UPDATE - Update a question by ID
+app.put('/questions/:id', async (req, res) => {
+  try {
+    const updatedQuestion = await QuizQuestion.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedQuestion) {
+      return res.status(404).json({ message: 'Question not found' });
+    }
+    
+    res.json(updatedQuestion);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE - Delete a question by ID
+app.delete('/questions/:id', async (req, res) => {
+  try {
+    const deletedQuestion = await QuizQuestion.findByIdAndDelete(req.params.id);
+    
+    if (!deletedQuestion) {
+      return res.status(404).json({ message: 'Question not found' });
+    }
+    
+    res.json({ message: 'Question deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
+app.post('/api/leaderboard', async (req, res) => {
+  try {
+    const newEntry = new Leaderboard({
+      name: req.body.name,
+      designation: req.body.designation,
+      phoneNo: req.body.phoneNo,
+      email: req.body.email,
+      website: req.body.website
+    });
+
+    const savedEntry = await newEntry.save();
+    res.status(201).json({
+      message: 'Leaderboard entry created successfully',
+      data: savedEntry
+    });
+  } catch (error) {
+    res.status(400).json({
+      message: 'Error creating leaderboard entry',
+      error: error.message
+    });
+  }
+});
+
+// READ - Get all leaderboard entries
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const entries = await Leaderboard.find();
+    res.status(200).json({
+      message: 'Leaderboard entries retrieved successfully',
+      data: entries
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error retrieving leaderboard entries',
+      error: error.message
+    });
+  }
+});
+
+// READ - Get a single leaderboard entry by ID
+app.get('/api/leaderboard/:id', async (req, res) => {
+  try {
+    const entry = await Leaderboard.findById(req.params.id);
+    
+    if (!entry) {
+      return res.status(404).json({
+        message: 'Leaderboard entry not found'
+      });
+    }
+
+    res.status(200).json({
+      message: 'Leaderboard entry retrieved successfully',
+      data: entry
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error retrieving leaderboard entry',
+      error: error.message
+    });
+  }
+});
+
+// UPDATE - Update a leaderboard entry
+app.put('/api/leaderboard/:id', async (req, res) => {
+  try {
+    const updatedEntry = await Leaderboard.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedEntry) {
+      return res.status(404).json({
+        message: 'Leaderboard entry not found'
+      });
+    }
+
+    res.status(200).json({
+      message: 'Leaderboard entry updated successfully',
+      data: updatedEntry
+    });
+  } catch (error) {
+    res.status(400).json({
+      message: 'Error updating leaderboard entry',
+      error: error.message
+    });
+  }
+});
+
+// DELETE - Delete a leaderboard entry
+app.delete('/api/leaderboard/:id', async (req, res) => {
+  try {
+    const deletedEntry = await Leaderboard.findByIdAndDelete(req.params.id);
+
+    if (!deletedEntry) {
+      return res.status(404).json({
+        message: 'Leaderboard entry not found'
+      });
+    }
+
+    res.status(200).json({
+      message: 'Leaderboard entry deleted successfully',
+      data: deletedEntry
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error deleting leaderboard entry',
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/notes', multiUpload, async (req, res) => {
+  try {
+    const { course, topic, chapterName, type } = req.body;
+    
+    // Validate type
+    if (!['Notes', 'Books'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid type. Must be Notes or Books.' });
+    }
+    
+    // Generate unique ID for the note
+    const noteId = uuidv4();
+    
+    // Construct full paths for PDF and thumbnail
+    const pdfPath = req.files && req.files.pdf 
+      ? `/uploads/notes/pdf/${path.basename(req.files.pdf[0].path)}` 
+      : null;
+    
+    const thumbnailPath = req.files && req.files.thumbnail 
+      ? `/uploads/notes/thumbnails/${path.basename(req.files.thumbnail[0].path)}` 
+      : null;
+
+    const newNote = new Notes({
+      course,
+      topic,
+      chapterName,
+      pdfPath,
+      thumbnailPath,
+      type,
+      noteId
+    });
+
+    const savedNote = await newNote.save();
+    res.status(201).json(savedNote);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Update notes endpoint
+app.put('/notes/:id', multiUpload, async (req, res) => {
+  try {
+    const { course, topic, chapterName, type } = req.body;
+    
+    // Validate type
+    if (type && !['Notes', 'Books'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid type. Must be Notes or Books.' });
+    }
+
+    const updateData = {
+      course,
+      topic,
+      chapterName,
+      ...(type && { type })
+    };
+
+    // Update PDF if new one is uploaded
+    if (req.files && req.files.pdf) {
+      updateData.pdfPath = `/uploads/notes/pdf/${path.basename(req.files.pdf[0].path)}`;
+    }
+
+    // Update thumbnail if new one is uploaded
+    if (req.files && req.files.thumbnail) {
+      updateData.thumbnailPath = `/uploads/notes/thumbnails/${path.basename(req.files.thumbnail[0].path)}`;
+    }
+
+    const updatedNote = await Notes.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedNote) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    res.json(updatedNote);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete notes endpoint
+app.delete('/notes/:id', async (req, res) => {
+  try {
+    const deletedNote = await Notes.findByIdAndDelete(req.params.id);
+    
+    if (!deletedNote) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    // Delete associated PDF file
+    if (deletedNote.pdfPath) {
+      try {
+        fs.unlinkSync(deletedNote.pdfPath);
+      } catch (err) {
+        console.error('Error deleting PDF file:', err);
+      }
+    }
+
+    // Delete associated thumbnail file
+    if (deletedNote.thumbnailPath) {
+      try {
+        fs.unlinkSync(deletedNote.thumbnailPath);
+      } catch (err) {
+        console.error('Error deleting thumbnail file:', err);
+      }
+    }
+
+    res.json({ message: 'Note deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Previous code remains the same...
+
+// Get all notes
+app.get('/api/notes', async (req, res) => {
+  try {
+    const { type, course } = req.query;
+    
+    // Build query object based on optional filters
+    let query = {};
+    if (type) {
+      query.type = type;
+    }
+    if (course) {
+      query.course = course;
+    }
+
+    const notes = await Notes.find(query);
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get notes by type
+app.get('/api/notes/type/:type', async (req, res) => {
+  try {
+    const notes = await Notes.find({ type: req.params.type });
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get notes by course
+app.get('/api/notes/course/:courseName', async (req, res) => {
+  try {
+    const notes = await Notes.find({ course: req.params.courseName });
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a single note by ID
+app.get('/api/notes/:id', async (req, res) => {
+  try {
+    const note = await Notes.findById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+    res.json(note);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a note by its unique noteId
+app.get('/api/notes/unique/:noteId', async (req, res) => {
+  try {
+    const note = await Notes.findOne({ noteId: req.params.noteId });
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+    res.json(note);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+app.post('/videos', async (req, res) => {
+  try {
+      const newVideo = new Video(req.body);
+      const savedVideo = await newVideo.save();
+      res.status(201).json(savedVideo);
+  } catch (error) {
+      res.status(400).json({ 
+          message: 'Error creating video', 
+          error: error.message
+      });
+  }
+});
+
+// READ - Get all videos
+app.get('/videos', async (req, res) => {
+  try {
+      const videos = await Video.find();
+      res.json(videos);
+  } catch (error) {
+      res.status(500).json({ 
+          message: 'Error fetching videos', 
+          error: error.message 
+      });
+  }
+});
+
+// READ - Get a single video by ID
+app.get('/videos/:id', async (req, res) => {
+  try {
+      const video = await Video.findById(req.params.id);
+      if (!video) {
+          return res.status(404).json({ message: 'Video not found' });
+      }
+      res.json(video);
+  } catch (error) {
+      res.status(500).json({ 
+          message: 'Error fetching video', 
+          error: error.message 
+      });
+  }
+});
+
+// UPDATE - Update a video
+app.put('/videos/:id', async (req, res) => {
+  try {
+      const updatedVideo = await Video.findByIdAndUpdate(
+          req.params.id, 
+          req.body, 
+          { new: true, runValidators: true }
+      );
+      
+      if (!updatedVideo) {
+          return res.status(404).json({ message: 'Video not found' });
+      }
+      
+      res.json(updatedVideo);
+  } catch (error) {
+      res.status(400).json({ 
+          message: 'Error updating video', 
+          error: error.message 
+      });
+  }
+});
+
+// DELETE - Delete a video
+app.delete('/videos/:id', async (req, res) => {
+  try {
+      const deletedVideo = await Video.findByIdAndDelete(req.params.id);
+      
+      if (!deletedVideo) {
+          return res.status(404).json({ message: 'Video not found' });
+      }
+      
+      res.json({ message: 'Video deleted successfully' });
+  } catch (error) {
+      res.status(500).json({ 
+          message: 'Error deleting video', 
+          error: error.message 
+      });
+  }
+});
+
+// Advanced Search - Filter Videos
+app.get('/videos/search', async (req, res) => {
+  try {
+      const { 
+          title, 
+          author, 
+          isFree, 
+          isLive, 
+          chapterName 
+      } = req.query;
+
+      const filter = {};
+      
+      if (title) filter.title = { $regex: title, $options: 'i' };
+      if (author) filter.author = { $regex: author, $options: 'i' };
+      if (isFree !== undefined) filter.isFree = isFree === 'true';
+      if (isLive !== undefined) filter.isLive = isLive === 'true';
+      if (chapterName) filter.chapterName = { $regex: chapterName, $options: 'i' };
+
+      const videos = await Video.find(filter);
+      res.json(videos);
+  } catch (error) {
+      res.status(500).json({ 
+          message: 'Error searching videos', 
+          error: error.message 
+      });
+  }
+});
+
+app.post('/resources', async (req, res) => {
+  try {
+      const { title, description, imageUrl, pdfUrl, contentType, author, subject, pricing, difficultyLevel } = req.body;
+
+      // Validate required fields
+      if (!title || !description || !author || !subject) {
+          return res.status(400).json({ message: "Title, description, author, and subject are required." });
+      }
+
+      const newResource = new Resource({
+          title: title.trim(),
+          description,
+          imageUrl,
+          pdfUrl,
+          contentType: contentType || 'other',
+          author,
+          subject,
+          pricing: pricing || 'free',
+          difficultyLevel: difficultyLevel || 'beginner'
+      });
+
+      const savedResource = await newResource.save();
+      res.status(201).json(savedResource);
+  } catch (error) {
+      res.status(400).json({ message: error.message });
+  }
+});
+
+
+// READ - Get all resources
+app.get('/resources', async (req, res) => {
+  try {
+      const resources = await Resource.find();
+      res.json(resources);
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+});
+
+// READ - Get resource by ID
+app.get('/resources/:id', async (req, res) => {
+  try {
+      const resource = await Resource.findById(req.params.id);
+      if (!resource) {
+          return res.status(404).json({ message: 'Resource not found' });
+      }
+      res.json(resource);
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+});
+
+// UPDATE - Update a resource
+app.put('/resources/:id', async (req, res) => {
+  try {
+      const updatedResource = await Resource.findByIdAndUpdate(
+          req.params.id, 
+          req.body, 
+          { new: true, runValidators: true }
+      );
+      
+      if (!updatedResource) {
+          return res.status(404).json({ message: 'Resource not found' });
+      }
+      
+      res.json(updatedResource);
+  } catch (error) {
+      res.status(400).json({ message: error.message });
+  }
+});
+
+// PATCH - Partially update a resource
+app.patch('/resources/:id', async (req, res) => {
+  try {
+      const updatedResource = await Resource.findByIdAndUpdate(
+          req.params.id, 
+          req.body, 
+          { new: true, runValidators: true }
+      );
+      
+      if (!updatedResource) {
+          return res.status(404).json({ message: 'Resource not found' });
+      }
+      
+      res.json(updatedResource);
+  } catch (error) {
+      res.status(400).json({ message: error.message });
+  }
+});
+
+// DELETE - Delete a resource
+app.delete('/resources/:id', async (req, res) => {
+  try {
+      const deletedResource = await Resource.findByIdAndDelete(req.params.id);
+      
+      if (!deletedResource) {
+          return res.status(404).json({ message: 'Resource not found' });
+      }
+      
+      res.json({ message: 'Resource deleted successfully' });
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+});
+
   // Vercel Serverless Configuration
   if (process.env.VERCEL) {
     // Export the Express app as a Vercel serverless function
