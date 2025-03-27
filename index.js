@@ -6,7 +6,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const { body, validationResult } = require('express-validator');
+const { body, validationResult } = require('express-validator');  
 const path = require('path');
 const fs = require('fs');
 
@@ -277,6 +277,61 @@ const courseItemSchema = new mongoose.Schema({
 });
 
 
+const VideoSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String
+  },
+  author: {
+    type: String,
+    required: true
+  },
+  videoPath: {
+    type: String,
+    required: true
+  },
+  thumbnailPath: {
+    type: String
+  },
+  uploadDate: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Notes Schema
+const NotesSchema = new mongoose.Schema({
+  course: { 
+    type: String, 
+    required: true 
+  },
+  topic: { 
+    type: String, 
+    required: true 
+  },
+  chapterName: { 
+    type: String, 
+    required: true 
+  },
+  pdfPath: { 
+    type: String, 
+    required: true 
+  },
+  thumbnailPath: { 
+    type: String 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+});
+
+
+
+
 // Assignment Schema
 const assignmentSchema = new mongoose.Schema({
   title: { type: String, required: true },
@@ -420,7 +475,9 @@ const UIComponent = mongoose.model('UIComponent', uiComponentSchema);
 const CarouselImage = mongoose.model('CarouselImage', carouselImageSchema);
 const Icon = mongoose.model('Icon', iconSchema);
 const Book = mongoose.model('Book', bookSchema);
-const Test = mongoose.model('Test', testSchema)
+const Test = mongoose.model('Test', testSchema);
+const Video = mongoose.model('Video', VideoSchema);
+const Notes = mongoose.model('Notes', NotesSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -2490,6 +2547,227 @@ app.get('/api/tests/:id/details', async (req, res) => {
       duration: test.duration,
       questionCount: test.questions.length
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/videos', multiUpload, async (req, res) => {
+  try {
+    const { name, description, author, title } = req.body;
+    
+    // Check if thumbnail was uploaded
+    const thumbnailPath = req.files && req.files.thumbnail 
+      ? req.files.thumbnail[0].path 
+      : null;
+
+    const newVideo = new Video({
+      name,
+      description,
+      author,
+      title,
+      thumbnailPath
+    });
+
+    const savedVideo = await newVideo.save();
+    res.status(201).json(savedVideo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all videos
+app.get('/api/videos', async (req, res) => {
+  try {
+    const videos = await Video.find();
+    res.json(videos);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a single video by ID
+app.get('/api/videos/:id', async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+    res.json(video);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update a video
+app.put('/api/videos/:id', multiUpload, async (req, res) => {
+  try {
+    const { name, description, author, title } = req.body;
+    
+    const updateData = {
+      name,
+      description,
+      author,
+      title
+    };
+
+    // Update thumbnail if new one is uploaded
+    if (req.files && req.files.thumbnail) {
+      updateData.thumbnailPath = req.files.thumbnail[0].path;
+    }
+
+    const updatedVideo = await Video.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedVideo) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+
+    res.json(updatedVideo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete a video
+app.delete('/api/videos/:id', async (req, res) => {
+  try {
+    const deletedVideo = await Video.findByIdAndDelete(req.params.id);
+    
+    if (!deletedVideo) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+
+    // Optional: Delete associated thumbnail file
+    if (deletedVideo.thumbnailPath) {
+      fs.unlinkSync(deletedVideo.thumbnailPath);
+    }
+
+    res.json({ message: 'Video deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/notes', multiUpload, async (req, res) => {
+  try {
+    const { course, topic, chapterName } = req.body;
+    
+    // Check if PDF and thumbnail were uploaded
+    const pdfPath = req.files && req.files.pdf 
+      ? req.files.pdf[0].path 
+      : null;
+    
+    const thumbnailPath = req.files && req.files.thumbnail 
+      ? req.files.thumbnail[0].path 
+      : null;
+
+    const newNote = new Notes({
+      course,
+      topic,
+      chapterName,
+      pdfPath,
+      thumbnailPath
+    });
+
+    const savedNote = await newNote.save();
+    res.status(201).json(savedNote);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all notes
+app.get('/notes', async (req, res) => {
+  try {
+    const notes = await Notes.find();
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get notes by course
+app.get('/notes/course/:courseName', async (req, res) => {
+  try {
+    const notes = await Notes.find({ course: req.params.courseName });
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a single note by ID
+app.get('/notes/:id', async (req, res) => {
+  try {
+    const note = await Notes.findById(req.params.id);
+    if (!note) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+    res.json(note);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update a note
+app.put('/notes/:id', multiUpload, async (req, res) => {
+  try {
+    const { course, topic, chapterName } = req.body;
+    
+    const updateData = {
+      course,
+      topic,
+      chapterName
+    };
+
+    // Update PDF if new one is uploaded
+    if (req.files && req.files.pdf) {
+      updateData.pdfPath = req.files.pdf[0].path;
+    }
+
+    // Update thumbnail if new one is uploaded
+    if (req.files && req.files.thumbnail) {
+      updateData.thumbnailPath = req.files.thumbnail[0].path;
+    }
+
+    const updatedNote = await Notes.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedNote) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    res.json(updatedNote);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Delete a note
+app.delete('/notes/:id', async (req, res) => {
+  try {
+    const deletedNote = await Notes.findByIdAndDelete(req.params.id);
+    
+    if (!deletedNote) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    // Optional: Delete associated PDF and thumbnail files
+    if (deletedNote.pdfPath) {
+      fs.unlinkSync(deletedNote.pdfPath);
+    }
+    if (deletedNote.thumbnailPath) {
+      fs.unlinkSync(deletedNote.thumbnailPath);
+    }
+
+    res.json({ message: 'Note deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
