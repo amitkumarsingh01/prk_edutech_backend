@@ -1095,6 +1095,26 @@ app.post('/api/profile/photo', authenticateToken, upload.single('photo'), async 
   }
 });
 
+app.get('/api/profile/photo', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (!user.profile || !user.profile.photo) {
+      return res.status(404).json({ message: 'Profile photo not found' });
+    }
+    
+    res.json({ 
+      photoUrl: user.profile.photo 
+    });
+  } catch (error) {
+    console.error('Error retrieving profile photo:', error);
+    res.status(500).json({ message: 'Server error while retrieving profile photo' });
+  }
+});
+
 // app.post('/api/profile/parents', authenticateToken, async (req, res) => {
 //     try {
 //       const { parents } = req.body;
