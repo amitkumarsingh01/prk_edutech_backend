@@ -113,7 +113,7 @@ const userSchema = new mongoose.Schema({
     dateOfJoining: { type: Date },
     parents: [{
       name: { type: String },
-      relationship: { type: String },  // Add relationship field
+      relationship: { type: String },
       phone: { type: String },
       email: { type: String }
     }],
@@ -122,11 +122,6 @@ const userSchema = new mongoose.Schema({
       gender: { type: String },
       nationality: { type: String },
       bloodGroup: { type: String },
-      aadharNumber: { type: String },
-      aadharImage: { type: String },
-      pan: { type: String },
-      panImage: { type: String },
-      signatureImage: { type: String }
     },
     address: {
       permanent: {
@@ -142,33 +137,17 @@ const userSchema = new mongoose.Schema({
       college: {
         name: { type: String },
         marks: { type: Number },
-        resultImage: { type: String }
       },
       school12th: {
         name: { type: String },
         marks: { type: Number },
-        resultImage: { type: String }
       },
       school10th: {
         name: { type: String },
         marks: { type: Number },
-        resultImage: { type: String }
       }
     }
   },
-  batches: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Batch' 
-  }],
-  courses: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Course' 
-  }],
-  notifications: [{
-    message: { type: String },
-    date: { type: Date, default: Date.now },
-    read: { type: Boolean, default: false }
-  }],
   createdAt: { type: Date, default: Date.now }
 });
 
