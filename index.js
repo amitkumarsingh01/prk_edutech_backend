@@ -10,6 +10,10 @@ const { body, validationResult } = require('express-validator');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook').Strategy;
+const session = require('express-session');
 
 // Initialize Express app
 const app = express();
@@ -22,6 +26,108 @@ let sources = [];
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(session({
+  secret: 'your-session-secret',
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
+passport.use(new GoogleStrategy({
+  clientID: '543690557046-m8ns16dkjd2lekkrt0gs2kcpo3s3ft8c.apps.googleusercontent.com',
+  clientSecret: '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',
+  callbackURL: 'https://server.prkedutech.com/auth/google/callback'
+},
+async (accessToken, refreshToken, profile, done) => {
+  try {
+    // Check if user exists
+    let user = await User.findOne({ email: profile.emails[0].value });
+    
+    if (user) {
+      // User exists, return user
+      return done(null, user);
+    } else {
+      // Generate random password (10 characters)
+      const randomPassword = Math.random().toString(36).slice(-10);
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+      
+      // Create new user
+      const newUser = new User({
+        name: profile.displayName,
+        email: profile.emails[0].value,
+        password: hashedPassword,
+        phone: '1234567890', // Required field, but we don't have it from Google
+        userType: 'free' // Default user type
+      });
+      
+      await newUser.save();
+      return done(null, newUser);
+    }
+  } catch (error) {
+    return done(error, null);
+  }
+}
+));
+
+passport.use(new FacebookStrategy({
+  clientID: '560417249889113',
+  clientSecret: '2d1dae13ca770e9cacee7ebafb19562b',
+  callbackURL: 'https://server.prkedutech.com/auth/facebook/callback',
+  profileFields: ['id', 'displayName', 'email']
+},
+async (accessToken, refreshToken, profile, done) => {
+  try {
+    // Check if email is available
+    if (!profile.emails || !profile.emails[0].value) {
+      return done(new Error('Email not provided by Facebook'), null);
+    }
+    
+    // Check if user exists
+    let user = await User.findOne({ email: profile.emails[0].value });
+    
+    if (user) {
+      // User exists, return user
+      return done(null, user);
+    } else {
+      // Generate random password (10 characters)
+      const randomPassword = Math.random().toString(36).slice(-10);
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+      
+      // Create new user
+      const newUser = new User({
+        name: profile.displayName,
+        email: profile.emails[0].value,
+        password: hashedPassword,
+        phone: '', // Required field, but we don't have it from Facebook
+        userType: 'free' // Default user type
+      });
+      
+      await newUser.save();
+      return done(null, newUser);
+    }
+  } catch (error) {
+    return done(error, null);
+  }
+}
+));
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -42,14 +148,25 @@ const notesPdfDir = path.join(notesDir, 'pdf');
 
 app.use('/uploads', express.static(uploadsDir));
 
-// MongoDB Connection
-mongoose.connect('mongodb://127.0.0.1:27017/prk_edutech', {
+mongoose.connect('mongodb://127.0.0.1:27017/prk_edutech_new_db', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
   serverSelectionTimeoutMS: 30000, // Increase timeout
 })
-.then(() => console.log('Connected to Local MongoDB'))
+.then(async () => {
+  console.log('Connected to Local MongoDB');
+
+  // Check if any collections exist; if not, create a dummy one
+  const collections = await mongoose.connection.db.listCollections().toArray();
+  if (collections.length === 0) {
+    console.log('Database is empty. Creating a default collection...');
+    const SampleModel = mongoose.model('SampleCollection', new mongoose.Schema({ name: String }));
+    await SampleModel.create({ name: 'Initial Entry' });
+    console.log('Default collection created with an entry.');
+  }
+})
 .catch(err => console.error('MongoDB connection error:', err));
+
 
 
 const storage = multer.diskStorage({
@@ -146,7 +263,9 @@ const userSchema = new mongoose.Schema({
         name: { type: String },
         marks: { type: Number },
       }
-    }
+    },
+    batches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Batch' }],
+    courses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
   },
   createdAt: { type: Date, default: Date.now }
 });
@@ -163,21 +282,9 @@ const resourceSchema = new mongoose.Schema({
   },
   imageUrl: { 
       type: String, 
-      validate: {
-          validator: function(v) {
-              return /^https?:\/\/.+/.test(v);
-          },
-          message: props => `${props.value} is not a valid URL!`
-      }
   },
   pdfUrl: { 
       type: String, 
-      validate: {
-          validator: function(v) {
-              return /^https?:\/\/.+\.pdf$/.test(v);
-          },
-          message: props => `${props.value} is not a valid PDF URL!`
-      }
   },
   contentType: {
       type: String, 
@@ -269,12 +376,6 @@ const VideoSchema = new mongoose.Schema({
   videoUrl: { 
       type: String, 
       required: true,
-      validate: {
-          validator: function(v) {
-              return /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(v);
-          },
-          message: props => `${props.value} is not a valid URL!`
-      }
   },
   description: { 
       type: String, 
@@ -290,12 +391,6 @@ const VideoSchema = new mongoose.Schema({
   },
   thumbnailUrl: { 
       type: String,
-      validate: {
-          validator: function(v) {
-              return v === '' || /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(v);
-          },
-          message: props => `${props.value} is not a valid URL!`
-      }
   },
   isFree: { 
       type: Boolean, 
@@ -720,6 +815,106 @@ app.get('/', (req, res) => {
 });
 
 // Authentication Routes
+app.get('/auth/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  async (req, res) => {
+    try {
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: req.user._id, email: req.user.email }, 
+        JWT_SECRET, 
+        { expiresIn: '24h' }
+      );
+      
+      // Redirect to app with token
+      res.redirect(`prkedutech://auth-callback?token=${token}&userId=${req.user._id}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}&userType=${req.user.userType}`);
+    } catch (error) {
+      console.error('Error in Google callback:', error);
+      res.redirect('prkedutech://auth-callback?error=failed');
+    }
+  }
+);
+
+// Facebook routes
+app.get('/auth/facebook',
+  passport.authenticate('facebook', { scope: ['email'] })
+);
+
+app.get('/auth/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  async (req, res) => {
+    try {
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: req.user._id, email: req.user.email }, 
+        JWT_SECRET, 
+        { expiresIn: '24h' }
+      );
+      
+      // Redirect to app with token
+      res.redirect(`prkedutech://auth-callback?token=${token}&userId=${req.user._id}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}&userType=${req.user.userType}`);
+    } catch (error) {
+      console.error('Error in Facebook callback:', error);
+      res.redirect('prkedutech://auth-callback?error=failed');
+    }
+  }
+);
+
+app.post('/auth/social/token', async (req, res) => {
+  try {
+    const { provider, providerId, email, name } = req.body;
+    
+    if (!email || !provider || !providerId) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+    
+    // Check if user exists
+    let user = await User.findOne({ email });
+    
+    if (!user) {
+      // Generate random password (10 characters)
+      const randomPassword = Math.random().toString(36).slice(-10);
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+      
+      // Create new user
+      user = new User({
+        name: name,
+        email: email,
+        password: hashedPassword,
+        phone: '1234567890', // Required field, but empty for now
+        userType: 'free' // Default user type
+      });
+      
+      await user.save();
+    }
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email }, 
+      JWT_SECRET, 
+      { expiresIn: '24h' }
+    );
+    
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        userType: user.userType
+      }
+    });
+  } catch (error) {
+    console.error('Social token login error:', error);
+    res.status(500).json({ message: 'Server error during social login' });
+  }
+});
 
 // Register a new user
 app.post('/api/auth/signup', [
@@ -995,10 +1190,8 @@ app.post('/api/users/reset-default-password', authenticateToken, async (req, res
 // Get current user profile
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId)
-      .select('-password')
-      .populate('batches', 'name batchId')
-      .populate('courses', 'name courseId');
+    console.log("User ID from token:", req.user.userId);
+    const user = await User.findById(req.user.userId).select('-password');
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -1007,7 +1200,8 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Error fetching profile:', error);
-    res.status(500).json({ message: 'Server error while fetching profile' });
+    console.error('Error details:', error.stack);
+    res.status(500).json({ message: 'Server error while fetching profile', error: error.message });
   }
 });
 
@@ -3700,114 +3894,207 @@ process.on('unhandledRejection', (reason, promise) => {
 
 app.post('/videos', async (req, res) => {
   try {
-      const newVideo = new Video(req.body);
-      const savedVideo = await newVideo.save();
-      res.status(201).json(savedVideo);
+    const { title, videoUrl, author, description, chapterName, thumbnailUrl, isFree, isLive, isYoutubeLive } = req.body;
+    
+    if (!title || !videoUrl || !author) {
+      return res.status(400).json({ message: 'Title, videoUrl, and author are required.' });
+    }
+    
+    const newVideo = new Video({
+      title,
+      videoUrl,
+      author,
+      description: description || '',
+      chapterName: chapterName || '',
+      thumbnailUrl,
+      isFree: isFree ?? true,
+      isLive: isLive ?? false,
+      isYoutubeLive: isYoutubeLive ?? false
+    });
+    
+    const savedVideo = await newVideo.save();
+    res.status(201).json(savedVideo);
   } catch (error) {
-      res.status(400).json({ 
-          message: 'Error creating video', 
-          error: error.message
-      });
+    res.status(400).json({ message: 'Error creating video', error: error.message });
   }
 });
 
 // READ - Get all videos
 app.get('/videos', async (req, res) => {
   try {
-      const videos = await Video.find();
-      res.json(videos);
+    const videos = await Video.find();
+    res.json(videos);
   } catch (error) {
-      res.status(500).json({ 
-          message: 'Error fetching videos', 
-          error: error.message 
-      });
+    res.status(500).json({ message: 'Error fetching videos', error: error.message });
   }
 });
 
 // READ - Get a single video by ID
 app.get('/videos/:id', async (req, res) => {
   try {
-      const video = await Video.findById(req.params.id);
-      if (!video) {
-          return res.status(404).json({ message: 'Video not found' });
-      }
-      res.json(video);
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ message: 'Video not found' });
+    res.json(video);
   } catch (error) {
-      res.status(500).json({ 
-          message: 'Error fetching video', 
-          error: error.message 
-      });
+    res.status(500).json({ message: 'Error fetching video', error: error.message });
   }
 });
 
 // UPDATE - Update a video
 app.put('/videos/:id', async (req, res) => {
   try {
-      const updatedVideo = await Video.findByIdAndUpdate(
-          req.params.id, 
-          req.body, 
-          { new: true, runValidators: true }
-      );
-      
-      if (!updatedVideo) {
-          return res.status(404).json({ message: 'Video not found' });
-      }
-      
-      res.json(updatedVideo);
+    const updatedVideo = await Video.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedVideo) return res.status(404).json({ message: 'Video not found' });
+    res.json(updatedVideo);
   } catch (error) {
-      res.status(400).json({ 
-          message: 'Error updating video', 
-          error: error.message 
-      });
+    res.status(400).json({ message: 'Error updating video', error: error.message });
   }
 });
 
 // DELETE - Delete a video
 app.delete('/videos/:id', async (req, res) => {
   try {
-      const deletedVideo = await Video.findByIdAndDelete(req.params.id);
-      
-      if (!deletedVideo) {
-          return res.status(404).json({ message: 'Video not found' });
-      }
-      
-      res.json({ message: 'Video deleted successfully' });
+    const deletedVideo = await Video.findByIdAndDelete(req.params.id);
+    if (!deletedVideo) return res.status(404).json({ message: 'Video not found' });
+    res.json({ message: 'Video deleted successfully' });
   } catch (error) {
-      res.status(500).json({ 
-          message: 'Error deleting video', 
-          error: error.message 
-      });
+    res.status(500).json({ message: 'Error deleting video', error: error.message });
   }
 });
 
 // Advanced Search - Filter Videos
 app.get('/videos/search', async (req, res) => {
   try {
-      const { 
-          title, 
-          author, 
-          isFree, 
-          isLive, 
-          chapterName 
-      } = req.query;
-
-      const filter = {};
-      
-      if (title) filter.title = { $regex: title, $options: 'i' };
-      if (author) filter.author = { $regex: author, $options: 'i' };
-      if (isFree !== undefined) filter.isFree = isFree === 'true';
-      if (isLive !== undefined) filter.isLive = isLive === 'true';
-      if (chapterName) filter.chapterName = { $regex: chapterName, $options: 'i' };
-
-      const videos = await Video.find(filter);
-      res.json(videos);
+    const { title, author, isFree, isLive, chapterName } = req.query;
+    const filter = {};
+    
+    if (title) filter.title = { $regex: title, $options: 'i' };
+    if (author) filter.author = { $regex: author, $options: 'i' };
+    if (isFree !== undefined) filter.isFree = isFree === 'true';
+    if (isLive !== undefined) filter.isLive = isLive === 'true';
+    if (chapterName) filter.chapterName = { $regex: chapterName, $options: 'i' };
+    
+    const videos = await Video.find(filter);
+    res.json(videos);
   } catch (error) {
-      res.status(500).json({ 
-          message: 'Error searching videos', 
-          error: error.message 
-      });
+    res.status(500).json({ message: 'Error searching videos', error: error.message });
   }
 });
+
+// app.post('/videos', async (req, res) => {
+//   try {
+//       const newVideo = new Video(req.body);
+//       const savedVideo = await newVideo.save();
+//       res.status(201).json(savedVideo);
+//   } catch (error) {
+//       res.status(400).json({ 
+//           message: 'Error creating video', 
+//           error: error.message
+//       });
+//   }
+// });
+
+// // READ - Get all videos
+// app.get('/videos', async (req, res) => {
+//   try {
+//       const videos = await Video.find();
+//       res.json(videos);
+//   } catch (error) {
+//       res.status(500).json({ 
+//           message: 'Error fetching videos', 
+//           error: error.message 
+//       });
+//   }
+// });
+
+// // READ - Get a single video by ID
+// app.get('/videos/:id', async (req, res) => {
+//   try {
+//       const video = await Video.findById(req.params.id);
+//       if (!video) {
+//           return res.status(404).json({ message: 'Video not found' });
+//       }
+//       res.json(video);
+//   } catch (error) {
+//       res.status(500).json({ 
+//           message: 'Error fetching video', 
+//           error: error.message 
+//       });
+//   }
+// });
+
+// // UPDATE - Update a video
+// app.put('/videos/:id', async (req, res) => {
+//   try {
+//       const updatedVideo = await Video.findByIdAndUpdate(
+//           req.params.id, 
+//           req.body, 
+//           { new: true, runValidators: true }
+//       );
+      
+//       if (!updatedVideo) {
+//           return res.status(404).json({ message: 'Video not found' });
+//       }
+      
+//       res.json(updatedVideo);
+//   } catch (error) {
+//       res.status(400).json({ 
+//           message: 'Error updating video', 
+//           error: error.message 
+//       });
+//   }
+// });
+
+// // DELETE - Delete a video
+// app.delete('/videos/:id', async (req, res) => {
+//   try {
+//       const deletedVideo = await Video.findByIdAndDelete(req.params.id);
+      
+//       if (!deletedVideo) {
+//           return res.status(404).json({ message: 'Video not found' });
+//       }
+      
+//       res.json({ message: 'Video deleted successfully' });
+//   } catch (error) {
+//       res.status(500).json({ 
+//           message: 'Error deleting video', 
+//           error: error.message 
+//       });
+//   }
+// });
+
+// // Advanced Search - Filter Videos
+// app.get('/videos/search', async (req, res) => {
+//   try {
+//       const { 
+//           title, 
+//           author, 
+//           isFree, 
+//           isLive, 
+//           chapterName 
+//       } = req.query;
+
+//       const filter = {};
+      
+//       if (title) filter.title = { $regex: title, $options: 'i' };
+//       if (author) filter.author = { $regex: author, $options: 'i' };
+//       if (isFree !== undefined) filter.isFree = isFree === 'true';
+//       if (isLive !== undefined) filter.isLive = isLive === 'true';
+//       if (chapterName) filter.chapterName = { $regex: chapterName, $options: 'i' };
+
+//       const videos = await Video.find(filter);
+//       res.json(videos);
+//   } catch (error) {
+//       res.status(500).json({ 
+//           message: 'Error searching videos', 
+//           error: error.message 
+//       });
+//   }
+// });
 
 app.post('/resources', async (req, res) => {
   try {
