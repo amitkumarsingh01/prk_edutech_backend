@@ -1,0 +1,9 @@
+MONGODB_URI=mongodb+srv://aksmlibts:amit@cluster0.vqusi.mongodb.net/?retryWrites=true&w=majority
+GOOGLE_CLIENT_ID=543690557046-m8ns16dkjd2lekkrt0gs2kcpo3s3ft8c.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
+FACEBOOK_APP_ID=560417249889113
+FACEBOOK_APP_SECRET=2d1dae13ca770e9cacee7ebafb19562b
+JWT_SECRET=your_secure_secret_key
+CLOUDINARY_CLOUD_NAME=dlrvxodir
+CLOUDINARY_API_KEY=523311885858791
+CLOUDINARY_API_SECRET=94kL0kCs4Q5Yl7HIix4JwDuiOQ0
