@@ -569,6 +569,18 @@ const courseItemSchema = new mongoose.Schema({
   }
 });
 
+const jobListingSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  organisationName: { type: String, required: true },
+  postName: { type: String, required: true },
+  noOfVacancies: { type: Number, required: true },
+  qualificationNeeded: { type: String, required: true },
+  lastDateToApply: { type: Date, required: true },
+  linkToApply: { type: String, required: true },
+  sector: { type: String, enum: ['govt', 'pvt'], required: true }
+});
+
+
 // Notes Schema
 const NotesSchema = new mongoose.Schema({
   course: { 
@@ -792,6 +804,7 @@ const Notes = mongoose.model('Notes', NotesSchema);
 const QuizQuestion = mongoose.model('QuizQuestion', QuizQuestionSchema);
 const Leaderboard = mongoose.model('Leaderboard', leaderboardSchema);
 const Resource = mongoose.model('Resource', resourceSchema);
+const JobListing = mongoose.model('JobListing', jobListingSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -4198,6 +4211,101 @@ app.delete('/resources/:id', async (req, res) => {
       res.json({ message: 'Resource deleted successfully' });
   } catch (error) {
       res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/api/jobs', async (req, res) => {
+  try {
+    const jobs = await JobListing.find();
+    res.json(jobs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET job listing by ID
+app.get('/api/jobs/:id', async (req, res) => {
+  try {
+    const job = await JobListing.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Job listing not found' });
+    res.json(job);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST create new job listing
+app.post('/api/jobs', async (req, res) => {
+  const jobListing = new JobListing({
+    title: req.body.title,
+    organisationName: req.body.organisationName,
+    postName: req.body.postName,
+    noOfVacancies: req.body.noOfVacancies,
+    qualificationNeeded: req.body.qualificationNeeded,
+    lastDateToApply: req.body.lastDateToApply,
+    linkToApply: req.body.linkToApply,
+    sector: req.body.sector
+  });
+
+  try {
+    const newJobListing = await jobListing.save();
+    res.status(201).json(newJobListing);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// PUT update job listing by ID
+app.put('/api/jobs/:id', async (req, res) => {
+  try {
+    const job = await JobListing.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Job listing not found' });
+    
+    // Update fields
+    if (req.body.title) job.title = req.body.title;
+    if (req.body.organisationName) job.organisationName = req.body.organisationName;
+    if (req.body.postName) job.postName = req.body.postName;
+    if (req.body.noOfVacancies) job.noOfVacancies = req.body.noOfVacancies;
+    if (req.body.qualificationNeeded) job.qualificationNeeded = req.body.qualificationNeeded;
+    if (req.body.lastDateToApply) job.lastDateToApply = req.body.lastDateToApply;
+    if (req.body.linkToApply) job.linkToApply = req.body.linkToApply;
+    if (req.body.sector) job.sector = req.body.sector;
+    
+    const updatedJob = await job.save();
+    res.json(updatedJob);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// DELETE job listing by ID
+app.delete('/api/jobs/:id', async (req, res) => {
+  try {
+    const job = await JobListing.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Job listing not found' });
+    
+    await JobListing.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Job listing deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Search job listings by different parameters
+app.get('/api/jobs/search', async (req, res) => {
+  try {
+    const query = {};
+    
+    // Build query based on provided parameters
+    if (req.query.title) query.title = { $regex: req.query.title, $options: 'i' };
+    if (req.query.organisationName) query.organisationName = { $regex: req.query.organisationName, $options: 'i' };
+    if (req.query.postName) query.postName = { $regex: req.query.postName, $options: 'i' };
+    if (req.query.sector) query.sector = req.query.sector;
+    
+    const jobs = await JobListing.find(query);
+    res.json(jobs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
