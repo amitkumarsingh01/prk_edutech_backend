@@ -315,6 +315,33 @@ const resourceSchema = new mongoose.Schema({
   }
 });
 
+const resumeSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  phone: { type: String, required: true },
+  address: { type: String, required: true },
+  email: { type: String, required: true },
+  summary: { type: String, required: true },
+  education: [{
+    degree: { type: String, required: true },
+    college: { type: String, required: true },
+    location: { type: String, required: true },
+    gpa: { type: String },
+    coursework: { type: String },
+    title: { type: String }
+  }],
+  experience: [{
+    company: { type: String, required: true },
+    position: { type: String, required: true },
+    startDate: { type: String, required: true },
+    endDate: { type: String },
+    description: { type: String },
+    location: { type: String }
+  }],
+  skills: [{ type: String }],
+  hobbies: [{ type: String }],
+  createdAt: { type: Date, default: Date.now }
+});
+
 const leaderboardSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -805,6 +832,7 @@ const QuizQuestion = mongoose.model('QuizQuestion', QuizQuestionSchema);
 const Leaderboard = mongoose.model('Leaderboard', leaderboardSchema);
 const Resource = mongoose.model('Resource', resourceSchema);
 const JobListing = mongoose.model('JobListing', jobListingSchema);
+const Resume = mongoose.model('Resume', resumeSchema);
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -4296,6 +4324,7 @@ app.get('/api/jobs/search', async (req, res) => {
   try {
     const query = {};
     
+    
     // Build query based on provided parameters
     if (req.query.title) query.title = { $regex: req.query.title, $options: 'i' };
     if (req.query.organisationName) query.organisationName = { $regex: req.query.organisationName, $options: 'i' };
@@ -4306,6 +4335,87 @@ app.get('/api/jobs/search', async (req, res) => {
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+app.post('/api/resumes', async (req, res) => {
+  try {
+    const newResume = new Resume(req.body);
+    const savedResume = await newResume.save();
+    res.status(201).json(savedResume);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Get all resumes
+app.get('/api/resumes', async (req, res) => {
+  try {
+    const resumes = await Resume.find().sort({ createdAt: -1 });
+    res.status(200).json(resumes);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get a single resume by ID
+app.get('/api/resumes/:id', async (req, res) => {
+  try {
+    const resume = await Resume.findById(req.params.id);
+    if (!resume) {
+      return res.status(404).json({ message: 'Resume not found' });
+    }
+    res.status(200).json(resume);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update a resume
+app.put('/api/resumes/:id', async (req, res) => {
+  try {
+    const updatedResume = await Resume.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!updatedResume) {
+      return res.status(404).json({ message: 'Resume not found' });
+    }
+    res.status(200).json(updatedResume);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a resume
+app.delete('/api/resumes/:id', async (req, res) => {
+  try {
+    const resume = await Resume.findByIdAndDelete(req.params.id);
+    if (!resume) {
+      return res.status(404).json({ message: 'Resume not found' });
+    }
+    res.status(200).json({ message: 'Resume deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Generate PDF endpoint
+app.get('/api/resumes/:id/pdf', async (req, res) => {
+  try {
+    const resume = await Resume.findById(req.params.id);
+    if (!resume) {
+      return res.status(404).json({ message: 'Resume not found' });
+    }
+    // In a real implementation, you would generate a PDF here
+    // For now, we'll just return the resume data with a success message
+    res.status(200).json({
+      message: 'PDF generation endpoint. In a real implementation, this would return a PDF file.',
+      resume: resume
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
