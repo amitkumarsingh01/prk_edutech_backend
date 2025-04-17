@@ -14,6 +14,8 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const FacebookStrategy = require('passport-facebook').Strategy;
 const session = require('express-session');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 // Initialize Express app
 const app = express();
@@ -223,6 +225,8 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   userType: { type: String, enum: ['free', 'admin', 'premium'], default: 'free' },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
   profile: {
     photo: { type: String },
     about: { type: String },
@@ -355,8 +359,8 @@ const leaderboardSchema = new mongoose.Schema({
   },
   phoneNo: {
     type: String,
-    required: true,
-    unique: true,
+    required: false,
+    unique: false,
     trim: true
   },
   email: {
@@ -4417,6 +4421,233 @@ app.get('/api/resumes/:id/pdf', async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+});
+
+// app.post('/api/auth/forgot-password', [
+//   body('email').isEmail().withMessage('Valid email is required')
+// ], async (req, res) => {
+//   // Check for validation errors
+//   const errors = validationResult(req);
+//   if (!errors.isEmpty()) {
+//     return res.status(400).json({ errors: errors.array() });
+//   }
+
+//   try {
+//     const { email } = req.body;
+
+//     // Find user by email
+//     const user = await User.findOne({ email });
+//     if (!user) {
+//       return res.status(404).json({ message: 'User with this email does not exist' });
+//     }
+
+//     // Generate reset token
+//     const resetToken = crypto.randomBytes(20).toString('hex');
+    
+//     // Set token and expiration on user
+//     user.resetPasswordToken = resetToken;
+//     user.resetPasswordExpires = Date.now() + 3600000; // Token valid for 1 hour
+//     await user.save();
+
+//     // Create nodemailer transporter
+//     const transporter = nodemailer.createTransport({
+//       service: 'gmail', // or your preferred email service
+//       auth: {
+//         user: process.env.EMAIL_USER || 'prkglobal360.in@gmail.com',
+//         pass: process.env.EMAIL_PASSWORD || 'PRK@2025'
+//       }
+//     });
+
+//     // Email content
+//     const resetUrl = `${process.env.FRONTEND_URL || 'https://admin.prkedutech.com'}/reset-password/${resetToken}`;
+    
+//     const mailOptions = {
+//       to: user.email,
+//       from: process.env.EMAIL_USER || 'prkglobal360.in@gmail.com',
+//       subject: 'Password Reset Request',
+//       html: `
+//         <p>You requested a password reset.</p>
+//         <p>Please click on the following link to reset your password:</p>
+//         <a href="${resetUrl}">${resetUrl}</a>
+//         <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>
+//         <p>This link is valid for one hour.</p>
+//       `
+//     };
+
+//     // Send email
+//     await transporter.sendMail(mailOptions);
+
+//     res.status(200).json({ message: 'Password reset email sent' });
+//   } catch (error) {
+//     console.error('Forgot password error:', error);
+//     res.status(500).json({ message: 'Server error during password reset request' });
+//   }
+// });
+
+app.post('/api/auth/forgot-password', [
+  body('email').isEmail().withMessage('Valid email is required')
+], async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { email } = req.body;
+    console.log(`Received password reset request for email: ${email}`);
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log(`User not found with email: ${email}`);
+      return res.status(404).json({ message: 'User with this email does not exist' });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    console.log(`Generated reset token: ${resetToken}`);
+    
+    // Set token and expiration on user
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // Token valid for 1 hour
+    await user.save();
+    console.log(`Token saved to user document`);
+
+    // Email content
+    // Using a fixed backend URL
+    const resetUrl = `https://server.prkedutech.com/reset-password/${resetToken}`;
+    console.log(`Reset URL generated: ${resetUrl}`);
+    
+    try {
+      // Create nodemailer transporter
+      // Note: Using Gmail might require "less secure app access" or an app password
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || 'prkglobal360.in@gmail.com',
+          pass: process.env.EMAIL_PASSWORD || 'aylzpcwlrwjnwpei'
+        }
+      });
+      
+      console.log(`Email transporter created with user: ${process.env.EMAIL_USER || 'prkglobal360.in@gmail.com'}`);
+
+      const mailOptions = {
+        to: user.email,
+        from: process.env.EMAIL_USER || 'prkglobal360.in@gmail.com',
+        subject: 'Password Reset Request',
+        html: `
+          <p>You requested a password reset.</p>
+          <p>Please click on the following link to reset your password:</p>
+          <a href="${resetUrl}">${resetUrl}</a>
+          <p>If you did not request this, please ignore this email and your password will remain unchanged.</p>
+          <p>This link is valid for one hour.</p>
+        `
+      };
+
+      console.log(`Attempting to send email to: ${user.email}`);
+      
+      // Send email
+      await transporter.sendMail(mailOptions);
+      console.log(`Email sent successfully to: ${user.email}`);
+
+      res.status(200).json({ message: 'Password reset email sent', debug: { token: resetToken, url: resetUrl } });
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      
+      // Save the token but notify about email issue
+      res.status(200).json({ 
+        message: 'Reset token generated but email sending failed. Check server logs.', 
+        debug: { token: resetToken, url: resetUrl } 
+      });
+    }
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error during password reset request', error: error.message });
+  }
+});
+
+// 2. Create a route to verify reset token
+app.get('/api/auth/reset-password/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Find user with token and check if token is still valid
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+    }
+
+    res.status(200).json({ message: 'Token is valid', email: user.email });
+  } catch (error) {
+    console.error('Reset token verification error:', error);
+    res.status(500).json({ message: 'Server error during token verification' });
+  }
+});
+
+// // Serve the reset password page
+// app.get('/reset-password/:token', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
+// });
+
+// 3. Create a route to reset password with token
+app.post('/api/auth/reset-password', [
+  body('token').notEmpty().withMessage('Token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+], async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { token, password } = req.body;
+    
+    // Add debug logging
+    console.log('Token received:', token);
+    
+    // Find user with token and check if token is still valid
+    const user = await User.findOne({
+      resetPasswordToken: token
+    });
+    
+    console.log('User found with token:', user ? 'Yes' : 'No');
+    
+    if (user) {
+      console.log('Token expiration time:', new Date(user.resetPasswordExpires));
+      console.log('Current time:', new Date());
+      console.log('Is token still valid:', user.resetPasswordExpires > Date.now());
+    }
+    
+    // Now check if the token is valid (moved after logging)
+    if (!user || user.resetPasswordExpires <= Date.now()) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+    
+    // Clear reset token fields
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    
+    await user.save();
+
+    res.status(200).json({ message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ message: 'Server error during password reset' });
+  }
+});
+
+app.get('/reset-password/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
 });
 
   // Vercel Serverless Configuration
